@@ -35,6 +35,10 @@ enum class TokenType {
     And,
     Or,
     Is,
+    Group,
+    By,
+    Order,
+    Limit,
 
     StringType,
     Int64Type,

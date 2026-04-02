@@ -145,6 +145,18 @@ TokenType Lexer::KeywordType(const std::string& text) noexcept {
     if (upper == "MAX") {
         return TokenType::Max;
     }
+    if (upper == "GROUP") {
+        return TokenType::Group;
+    }
+    if (upper == "BY") {
+        return TokenType::By;
+    }
+    if (upper == "ORDER") {
+        return TokenType::Order;
+    }
+    if (upper == "LIMIT") {
+        return TokenType::Limit;
+    }
 
     return TokenType::Identifier;
 }
@@ -169,6 +181,160 @@ Token Lexer::ReadIdentifierOrKeyword() {
     const TokenType type = KeywordType(text);
 
     return MakeToken(type, start, text);
+}
+
+Token Lexer::ReadNumber()
+{
+    const SourcePosition token_start = CurrentPosition();
+    bool is_double = false;
+
+    if (CurrentChar() == '-') {
+        Advance();
+    }
+
+    if (std::isdigit(static_cast<unsigned char>(CurrentChar())) == 0) {
+        throw ParseError("ReadNumber called at invalid position", token_start);
+    }
+
+    while (!IsAtEnd() && std::isdigit(static_cast<unsigned char>(CurrentChar())) != 0) {
+        Advance();
+    }
+
+    if (!IsAtEnd() && CurrentChar() == '.')
+    {
+        is_double = true;
+        Advance();
+
+        if (std::isdigit(static_cast<unsigned char>(CurrentChar())) == 0) {
+            throw ParseError("ReadNumber called at invalid position", token_start);
+        }
+
+        while (!IsAtEnd() && std::isdigit(static_cast<unsigned char>(CurrentChar())) != 0) {
+            Advance();
+        }
+    }
+
+    const std::string text = input_.substr(token_start.pos, pos_ - token_start.pos);
+
+    if (is_double) {
+        return MakeToken(TokenType::DoubleLiteral, token_start, text);
+    }
+
+    return MakeToken(TokenType::IntLiteral, token_start, text);
+}
+
+Token Lexer::ReadString() {
+    const SourcePosition token_start = CurrentPosition();
+
+    if (CurrentChar() != '\'') {
+        throw ParseError("ReadString called at invalid position", token_start);
+    }
+
+    Advance();
+
+    std::string text;
+
+    while (!IsAtEnd()) {
+        if (CurrentChar() == '\'') {
+            if (PeekChar() == '\'') {
+                text.push_back('\'');
+                Advance();
+                Advance();
+                continue;
+            }
+
+            Advance();
+            return MakeToken(TokenType::StringLiteral, token_start, text);
+        }
+
+        text.push_back(CurrentChar());
+        Advance();
+    }
+
+    throw ParseError("Unterminated string literal", token_start);
+}
+
+Token Lexer::NextToken() {
+    SkipWhitespace();
+
+    const SourcePosition token_start = CurrentPosition();
+
+    if (IsAtEnd()) {
+        return MakeToken(TokenType::EndOfFile, token_start, "");
+    }
+
+    const char current = CurrentChar();
+
+    if (IsIdentifierStart(current)) {
+        return ReadIdentifierOrKeyword();
+    }
+
+    if (std::isdigit(static_cast<unsigned char>(current)) != 0 || 
+        (current == '-' && std::isdigit(static_cast<unsigned char>(PeekChar())) != 0)) {
+        return ReadNumber();
+    }
+
+    if (current == '\'') {
+        return ReadString();
+    }
+
+
+    switch (current) {
+        case '(':
+            Advance();
+            return MakeToken(TokenType::LParen, token_start, "(");
+
+        case ')':
+            Advance();
+            return MakeToken(TokenType::RParen, token_start, ")");
+
+        case ',':
+            Advance();
+            return MakeToken(TokenType::Comma, token_start, ",");
+
+        case ';':
+            Advance();
+            return MakeToken(TokenType::Semicolon, token_start, ";");
+
+        case '*':
+            Advance();
+            return MakeToken(TokenType::Star, token_start, "*");
+
+        case '=':
+            Advance();
+            return MakeToken(TokenType::Equal, token_start, "=");
+
+        case '!':
+            Advance();
+            if (CurrentChar() == '=') {
+                Advance();
+                return MakeToken(TokenType::NotEqual, token_start, "!=");
+            }
+            throw ParseError("Unexpected character '!'", token_start);
+
+        case '<':
+            Advance();
+            if (CurrentChar() == '=') {
+                Advance();
+                return MakeToken(TokenType::LessEqual, token_start, "<=");
+            }
+            return MakeToken(TokenType::Less, token_start, "<");
+
+        case '>':
+            Advance();
+            if (CurrentChar() == '=') {
+                Advance();
+                return MakeToken(TokenType::GreaterEqual, token_start, ">=");
+            }
+            return MakeToken(TokenType::Greater, token_start, ">");
+
+        default:
+            throw ParseError(
+                std::string("Unexpected character: ") + current,
+                token_start
+            );
+    }
+
 }
 
 }
