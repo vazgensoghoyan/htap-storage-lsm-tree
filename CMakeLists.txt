@@ -10,6 +10,7 @@ enable_testing()
 
 add_library(htap_parser
     src/parser/lexer.cpp
+    src/parser/parser.cpp
 )
 
 target_include_directories(htap_parser
@@ -28,6 +29,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(htap_parser_tests
     tests/parser/lexer_tests.cpp
+    tests/parser/parser_tests.cpp
 )
 
 target_link_libraries(htap_parser_tests
