@@ -40,6 +40,9 @@ enum class TokenType {
     Order,
     Limit,
 
+    Asc,
+    Desc,
+
     StringType,
     Int64Type,
     DoubleType,

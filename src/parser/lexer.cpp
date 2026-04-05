@@ -157,6 +157,12 @@ TokenType Lexer::KeywordType(const std::string& text) noexcept {
     if (upper == "LIMIT") {
         return TokenType::Limit;
     }
+    if (upper == "ASC") {
+        return TokenType::Asc;
+    }
+    if (upper == "DESC") {
+        return TokenType::Desc;
+    }
 
     return TokenType::Identifier;
 }
