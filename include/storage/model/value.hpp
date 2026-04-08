@@ -18,10 +18,4 @@ using Value = std::variant<
     std::string
 >;
 
-inline ValueType get_value_type(const Value& v) {
-    if (std::holds_alternative<int64_t>(v)) return ValueType::INT64;
-    if (std::holds_alternative<double>(v)) return ValueType::DOUBLE;
-    return ValueType::STRING;
-}
-
 } // namespace htap::storage
