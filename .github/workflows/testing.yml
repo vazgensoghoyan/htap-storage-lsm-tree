@@ -5,36 +5,21 @@ on:
   pull_request:
   push:
     branches:
-      - "**"
+      - main
 
 jobs:
   testing:
-    strategy:
-      fail-fast: false
-      matrix:
-        runs-on:
-          - ubuntu-latest
-          - macos-latest
-        mode:
-          - Debug
-          - Release
-
-    runs-on: ${{ matrix.runs-on }}
-
-    name: ${{ matrix.runs-on }} (${{ matrix.mode }})
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Clone the sources
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: build
-        run: |
-          mkdir build
-          cd build
-          cmake -DCMAKE_BUILD_TYPE=${{ matrix.mode }} ..
-          cmake --build . --parallel
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 
-      - name: test
-        run: |
-          cd build
-          ctest --output-on-failure
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

@@ -1,0 +1,29 @@
+# build dirs
+build/
+cmake-build-*/
+out/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+compile_commands.json
+
+# binaries
+*.o
+*.obj
+*.exe
+*.out
+
+# IDE
+.vscode/
+.idea/
+.clion/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
