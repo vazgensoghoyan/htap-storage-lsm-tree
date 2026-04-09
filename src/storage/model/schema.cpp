@@ -12,7 +12,7 @@ void Schema::add_column(
         throw std::invalid_argument("Duplicate column name: " + name);
     }
 
-    if (is_key && key_index_ != -1) {
+    if (is_key && key_index_.has_value()) {
         throw std::invalid_argument("Multiple primary keys are not allowed");
     }
 
@@ -51,10 +51,10 @@ const Column& Schema::get_column(size_t index) const {
 }
 
 size_t Schema::key_column_index() const {
-    if (key_index_ == -1) {
+    if (!key_index_.has_value()) {
         throw std::runtime_error("Primary key is not defined");
     }
-    return key_index_;
+    return key_index_.value();
 }
 
 bool Schema::is_valid_value(

@@ -57,7 +57,7 @@ private:
 
     std::unordered_map<std::string, size_t> name_to_index_;
 
-    size_t key_index_ = static_cast<size_t>(-1);
+    std::optional<size_t> key_index_;
 };
 
 } // namespace htap::storage
