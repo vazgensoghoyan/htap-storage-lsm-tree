@@ -1,4 +1,4 @@
-#pragma once // storage/api/cursor.hpp
+#pragma once // storage/api/cursor_interface.hpp
 
 #include <cstddef>
 #include <cstdint>

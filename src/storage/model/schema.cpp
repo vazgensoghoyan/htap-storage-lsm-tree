@@ -59,7 +59,7 @@ size_t Schema::key_column_index() const {
 
 bool Schema::is_valid_value(
     size_t column_index,
-    const std::optional<Value>& value) const
+    const NullableValue& value) const
 {
     if (column_index >= columns_.size()) {
         return false;

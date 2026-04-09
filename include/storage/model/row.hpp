@@ -20,8 +20,8 @@ public:
     void set_key(int64_t key);
     int64_t key() const;
 
-    void set_value(size_t column_index, const std::optional<Value>& value);
-    const std::optional<Value>& get_value(size_t column_index) const;
+    void set_value(size_t column_index, const NullableValue& value);
+    const NullableValue& get_value(size_t column_index) const;
 
     bool has_value(size_t column_index) const;
 
@@ -29,7 +29,7 @@ public:
 
 private:
     int64_t key_;
-    std::vector<std::optional<Value>> values_;
+    std::vector<NullableValue> values_;
 };
 
 } // namespace htap::storage

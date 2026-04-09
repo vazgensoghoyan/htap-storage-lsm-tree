@@ -1,4 +1,4 @@
-#pragma once // storage/api/storage_engine.hpp
+#pragma once // storage/api/storage_engine_interface.hpp
 
 #include <memory>
 #include <optional>
@@ -6,7 +6,7 @@
 
 #include "storage/model/schema.hpp"
 #include "storage/model/value.hpp"
-#include "storage/api/cursor.hpp"
+#include "storage/api/cursor_interface.hpp"
 
 namespace htap::storage {
 
@@ -20,20 +20,21 @@ namespace htap::storage {
  */
 class IStorageEngine {
 public:
-    explicit IStorageEngine(const Schema& schema);
+    explicit IStorageEngine(const Schema& schema) : schema_(std::move(schema)) {}
+
     virtual ~IStorageEngine() = default;
 
-    const Schema& schema() const;
+    const Schema& schema() const { return schema_; }
 
     virtual void insert(
         int64_t key,
-        const std::vector<std::optional<Value>>& values) = 0;
+        const std::vector<NullableValue>& values) = 0;
 
-    virtual std::unique_ptr<Cursor> get(
+    virtual std::unique_ptr<ICursor> get(
         int64_t key,
         const std::vector<size_t>& projection) const = 0;
 
-    virtual std::unique_ptr<Cursor> scan(
+    virtual std::unique_ptr<ICursor> scan(
         int64_t from,
         int64_t to,
         const std::vector<size_t>& projection) const = 0;

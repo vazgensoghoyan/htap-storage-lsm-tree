@@ -2,8 +2,7 @@
 
 #include "storage/model/schema.hpp"
 
-namespace htap::storage {
-namespace {
+using namespace htap::storage;
 
 TEST(SchemaTest, AddsColumnsCorrectly) {
     Schema schema;
@@ -71,8 +70,8 @@ TEST(SchemaTest, ValidatesNotNullConstraint) {
 
     schema.add_column("key", ValueType::INT64, true, false);
 
-    std::optional<Value> null_value = std::nullopt;
-    std::optional<Value> valid_value = int64_t(10);
+    NullableValue null_value = std::nullopt;
+    NullableValue valid_value = int64_t(10);
 
     EXPECT_FALSE(schema.is_valid_value(0, null_value));
     EXPECT_TRUE(schema.is_valid_value(0, valid_value));
@@ -83,7 +82,7 @@ TEST(SchemaTest, ValidatesTypeMatching) {
 
     schema.add_column("age", ValueType::INT64);
 
-    std::optional<Value> wrong_type = std::string("hello");
+    NullableValue wrong_type = std::string("hello");
 
     EXPECT_FALSE(schema.is_valid_value(0, wrong_type));
 }
@@ -93,10 +92,7 @@ TEST(SchemaTest, AllowsNullForNullableColumn) {
 
     schema.add_column("name", ValueType::STRING, false, true);
 
-    std::optional<Value> null_value = std::nullopt;
+    NullableValue null_value = std::nullopt;
 
     EXPECT_TRUE(schema.is_valid_value(0, null_value));
 }
-
-} // namespace
-} // namespace htap::storage

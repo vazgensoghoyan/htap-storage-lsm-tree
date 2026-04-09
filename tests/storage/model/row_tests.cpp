@@ -2,8 +2,7 @@
 
 #include "storage/model/row.hpp"
 
-namespace htap::storage {
-namespace {
+using namespace htap::storage;
 
 TEST(RowTest, StoresAndRetrievesKey) {
     Row row(3);
@@ -62,6 +61,3 @@ TEST(RowTest, OverwritesValues) {
     ASSERT_TRUE(v.has_value());
     EXPECT_EQ(std::get<int64_t>(*v), 2);
 }
-
-} // namespace
-} // namespace htap::storage

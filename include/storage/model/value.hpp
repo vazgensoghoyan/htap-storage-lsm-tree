@@ -12,10 +12,8 @@ enum class ValueType {
     STRING
 };
 
-using Value = std::variant<
-    int64_t,
-    double,
-    std::string
->;
+using Value = std::variant<int64_t, double, std::string>;
+
+using NullableValue = std::optional<Value>;
 
 } // namespace htap::storage

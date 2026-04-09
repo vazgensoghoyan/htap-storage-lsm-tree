@@ -50,7 +50,7 @@ public:
     // проверить соответствие значения по номеру колонки
     bool is_valid_value(
         size_t column_index,
-        const std::optional<Value>& value) const;
+        const NullableValue& value) const;
 
 private:
     std::vector<Column> columns_;
