@@ -15,32 +15,33 @@ namespace htap::storage {
  *
  * Каждый объект имеет свою схему, которую он получает при создании
  * 
- * А уже executor, я предлагаю, будет хранить например:
- * std::unordered_map<std::string, std::unique_ptr<StorageEngine>> tables;
+ * В реализациях храним примерно
+ * std::unordered_map<std::string, std::unique_ptr<LsmTree>> tables;
+ * 
  */
 class IStorageEngine {
 public:
-    explicit IStorageEngine(const Schema& schema) : schema_(std::move(schema)) {}
-
     virtual ~IStorageEngine() = default;
 
-    const Schema& schema() const { return schema_; }
+    virtual const void create_table(const std::string& table_name, const Schema& schema) = 0;
+
+    virtual const Schema& get_table_schema(const std::string& table_name) const = 0;
 
     virtual void insert(
-        int64_t key,
+        const std::string& table_name,
+        Key key,
         const std::vector<NullableValue>& values) = 0;
 
     virtual std::unique_ptr<ICursor> get(
-        int64_t key,
+        const std::string& table_name,
+        Key key,
         const std::vector<size_t>& projection) const = 0;
 
     virtual std::unique_ptr<ICursor> scan(
-        int64_t from,
-        int64_t to,
+        const std::string& table_name,
+        Key from,
+        Key to,
         const std::vector<size_t>& projection) const = 0;
-
-protected:
-    Schema schema_;
 };
 
 } // namespace htap::storage

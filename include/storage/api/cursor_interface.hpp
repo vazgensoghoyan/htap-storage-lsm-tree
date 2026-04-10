@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 #include "storage/model/value.hpp"
 
@@ -28,8 +29,11 @@ public:
     // если достигли конца, valid станет возвращать false
     virtual void next() = 0;
 
+    // перейти к первому >= key
+    virtual void seek(const Key& key) = 0;
+
     // текущий ключ
-    virtual int64_t key() const = 0;
+    virtual Key key() const = 0;
 
     // проверить на null колонку
     virtual bool is_null(size_t column_idx) const = 0;
@@ -38,6 +42,9 @@ public:
     // если значение NULL то ошибка
     // если column_idx невалиден, то ошибка
     virtual const Value& value(size_t column_idx) const = 0;
+
+    // информация о projection
+    virtual const std::vector<size_t>& projection() const = 0;
 };
 
 } // namespace htap::storage

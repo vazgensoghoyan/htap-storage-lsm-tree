@@ -13,7 +13,6 @@ namespace htap::storage {
 struct Column {
     std::string name;
     ValueType type;
-
     bool is_key = false;
     bool nullable = true;
 };
@@ -36,21 +35,18 @@ public:
         bool nullable = true);
 
     const std::vector<Column>& columns() const;
+    const Column& get_column(size_t index) const;
 
     size_t size() const;
 
     // индекс колонки по имени
     std::optional<size_t> get_column_index(const std::string& name) const;
 
-    const Column& get_column(size_t index) const;
-
     // индекс первичного ключа
     size_t key_column_index() const;
 
     // проверить соответствие значения по номеру колонки
-    bool is_valid_value(
-        size_t column_index,
-        const NullableValue& value) const;
+    bool is_valid_value(size_t column_index, const NullableValue& value) const;
 
 private:
     std::vector<Column> columns_;

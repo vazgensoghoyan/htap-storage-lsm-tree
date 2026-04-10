@@ -31,6 +31,13 @@ const std::vector<Column>& Schema::columns() const {
     return columns_;
 }
 
+const Column& Schema::get_column(size_t index) const {
+    if (index >= columns_.size()) {
+        throw std::out_of_range("Column index out of range");
+    }
+    return columns_[index];
+}
+
 size_t Schema::size() const {
     return columns_.size();
 }
@@ -41,13 +48,6 @@ std::optional<size_t> Schema::get_column_index(const std::string& name) const {
         return std::nullopt;
     }
     return it->second;
-}
-
-const Column& Schema::get_column(size_t index) const {
-    if (index >= columns_.size()) {
-        throw std::out_of_range("Column index out of range");
-    }
-    return columns_[index];
 }
 
 size_t Schema::key_column_index() const {
