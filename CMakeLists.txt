@@ -13,7 +13,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Options
 # -----------------------------
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
-option(ENABLE_SANITIZERS "Enable sanitizers" OFF)
 option(BUILD_TESTS "Build tests" ON)
 
 # -----------------------------
@@ -39,16 +38,6 @@ if (ENABLE_WARNINGS)
         target_compile_options(htap_storage PRIVATE /W4 /permissive-)
     else()
         target_compile_options(htap_storage PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
-endif()
-
-# -----------------------------
-# Sanitizers
-# -----------------------------
-if (ENABLE_SANITIZERS)
-    if (NOT MSVC)
-        target_compile_options(htap_storage PRIVATE -fsanitize=address,undefined)
-        target_link_options(htap_storage PRIVATE -fsanitize=address,undefined)
     endif()
 endif()
 
@@ -88,13 +77,6 @@ if (BUILD_TESTS)
             target_compile_options(htap_storage_tests PRIVATE /W4 /permissive-)
         else()
             target_compile_options(htap_storage_tests PRIVATE -Wall -Wextra -Wpedantic)
-        endif()
-    endif()
-
-    if (ENABLE_SANITIZERS)
-        if (NOT MSVC)
-            target_compile_options(htap_storage_tests PRIVATE -fsanitize=address,undefined)
-            target_link_options(htap_storage_tests PRIVATE -fsanitize=address,undefined)
         endif()
     endif()
 
