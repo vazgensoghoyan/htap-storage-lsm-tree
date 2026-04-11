@@ -1,33 +1,17 @@
 #include "storage/model/schema.hpp"
 
-namespace htap::storage {
+using namespace htap::storage;
 
-void Schema::add_column(
-    const std::string& name,
-    ValueType type,
-    bool is_key,
-    bool nullable)
+Schema::Schema(std::vector<Column> columns, size_t key_index)
+    : columns_(std::move(columns)),
+      key_index_(key_index)
 {
-    if (name_to_index_.count(name) > 0) {
-        throw std::invalid_argument("Duplicate column name: " + name);
-    }
-
-    if (is_key && key_index_.has_value()) {
-        throw std::invalid_argument("Multiple primary keys are not allowed");
-    }
-
-    size_t index = columns_.size();
-
-    columns_.push_back( Column{ name, type, is_key, nullable } );
-
-    name_to_index_[name] = index;
-
-    if (is_key) {
-        key_index_ = index;
+    for (size_t i = 0; i < columns_.size(); ++i) {
+        name_to_index_[columns_[i].name] = i;
     }
 }
 
-const std::vector<Column>& Schema::columns() const {
+const std::vector<Column>& Schema::columns() const noexcept {
     return columns_;
 }
 
@@ -38,11 +22,11 @@ const Column& Schema::get_column(size_t index) const {
     return columns_[index];
 }
 
-size_t Schema::size() const {
+size_t Schema::size() const noexcept {
     return columns_.size();
 }
 
-std::optional<size_t> Schema::get_column_index(const std::string& name) const {
+std::optional<size_t> Schema::get_column_index(const std::string& name) const noexcept {
     auto it = name_to_index_.find(name);
     if (it == name_to_index_.end()) {
         return std::nullopt;
@@ -50,41 +34,35 @@ std::optional<size_t> Schema::get_column_index(const std::string& name) const {
     return it->second;
 }
 
-size_t Schema::key_column_index() const {
-    if (!key_index_.has_value()) {
-        throw std::runtime_error("Primary key is not defined");
-    }
-    return key_index_.value();
+size_t Schema::key_column_index() const noexcept {
+    return key_index_;
 }
 
-bool Schema::is_valid_value(
-    size_t column_index,
-    const NullableValue& value) const
-{
+bool Schema::is_valid_value(size_t column_index, const NullableValue& value) const {
     if (column_index >= columns_.size()) {
         return false;
     }
 
-    const Column& column = columns_[column_index];
+    const auto& col = columns_[column_index];
 
-    // NULL проверка
+    // NULL case
     if (!value.has_value()) {
-        return column.nullable;
+        return col.nullable;
     }
 
-    // тип должен совпадать
+    // Type check
     const Value& v = value.value();
 
-    switch (column.type) {
+    switch (col.type) {
         case ValueType::INT64:
             return std::holds_alternative<int64_t>(v);
+
         case ValueType::DOUBLE:
             return std::holds_alternative<double>(v);
+
         case ValueType::STRING:
             return std::holds_alternative<std::string>(v);
-        default:
-            return false;
     }
-}
 
-} // namespace htap::storage
+    return false; // до сюда не дойдем
+}
