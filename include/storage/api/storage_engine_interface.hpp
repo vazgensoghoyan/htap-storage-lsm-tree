@@ -23,9 +23,19 @@ class IStorageEngine {
 public:
     virtual ~IStorageEngine() = default;
 
-    virtual const void create_table(const std::string& table_name, const Schema& schema) = 0;
+    // ошибка если таблица уже существует
+    virtual void create_table(const std::string& table_name, const Schema& schema) = 0;
+
+    virtual bool table_exists(const std::string& table_name) const = 0;
+
+    // в нижних методах везде ошибка если таблицы не существует
 
     virtual const Schema& get_table_schema(const std::string& table_name) const = 0;
+
+    // данные должны соответствовать схеме, ошибка в insert иначе
+    // projection:
+    // - содержит уникальные индексы колонок < schema.size()
+    // - порядок сохраняется (как в запросе, типо select b, a)
 
     virtual void insert(
         const std::string& table_name,
@@ -37,6 +47,8 @@ public:
         Key key,
         const std::vector<size_t>& projection) const = 0;
 
+    // [from, to)
+    // решил, что так лучше, как например для складывания диапозонов
     virtual std::unique_ptr<ICursor> scan(
         const std::string& table_name,
         Key from,
