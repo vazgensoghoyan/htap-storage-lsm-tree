@@ -58,7 +58,6 @@ if (BUILD_TESTS)
 
     FetchContent_MakeAvailable(googletest)
 
-    # collect test sources automatically
     file(GLOB_RECURSE TEST_SOURCES
         CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
