@@ -47,8 +47,7 @@ public:
 
     // [from, to)
     // решил, что так лучше, как например для складывания диапозонов
-    // для full scan пишем:
-    // scan(table_name, KEY_MIN, KEY_MAX, projection) или что нужно
+    // И любую из границ можем не указывать, это эквивалентно +-inf
     virtual std::unique_ptr<ICursor> scan(
         const std::string& table_name,
         std::optional<Key> from,

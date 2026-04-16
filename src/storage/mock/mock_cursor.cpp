@@ -24,7 +24,7 @@ Key MockCursor::key() const {
     return keys_[pos_];
 }
 
-const NullableValue& MockCursor::value(size_t column_idx) const {
+NullableValue MockCursor::value(size_t column_idx) const {
     const auto& row = data_->at(keys_[pos_]);
 
     if (!is_projected(column_idx))

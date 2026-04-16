@@ -20,7 +20,7 @@ public:
     void next() override;
 
     Key key() const override;
-    const NullableValue& value(size_t column_idx) const override;
+    NullableValue value(size_t column_idx) const override;
 
 private:
     bool is_projected(size_t column_idx) const;

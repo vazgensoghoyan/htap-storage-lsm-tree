@@ -34,16 +34,16 @@ public:
     ) const override;
 
 private:
-    struct Table {
+    struct MockTable {
         Schema schema;
         std::map<Key, Row> data;
     };
 
-    Table& get_table(const std::string& name);
-    const Table& get_table(const std::string& name) const;
+    MockTable& get_table(const std::string& name);
+    const MockTable& get_table(const std::string& name) const;
 
 private:
-    std::unordered_map<std::string, Table> tables_;
+    std::unordered_map<std::string, MockTable> tables_;
 };
 
 } // namespace htap::storage

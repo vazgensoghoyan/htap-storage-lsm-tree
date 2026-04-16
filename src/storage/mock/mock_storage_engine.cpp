@@ -10,7 +10,7 @@ void MockStorageEngine::create_table(const std::string& table_name, const Schema
     if (tables_.count(table_name))
         throw std::runtime_error("Table already exists");
 
-    tables_.emplace(table_name, Table{schema, {}});
+    tables_.emplace(table_name, MockTable{schema, {}});
 }
 
 bool MockStorageEngine::table_exists(const std::string& table_name) const {
@@ -83,7 +83,7 @@ std::unique_ptr<ICursor> MockStorageEngine::scan(
     );
 }
 
-MockStorageEngine::Table& MockStorageEngine::get_table(const std::string& name) {
+MockStorageEngine::MockTable& MockStorageEngine::get_table(const std::string& name) {
     auto it = tables_.find(name);
 
     if (it == tables_.end())
@@ -92,7 +92,7 @@ MockStorageEngine::Table& MockStorageEngine::get_table(const std::string& name) 
     return it->second;
 }
 
-const MockStorageEngine::Table& MockStorageEngine::get_table(const std::string& name) const {
+const MockStorageEngine::MockTable& MockStorageEngine::get_table(const std::string& name) const {
     auto it = tables_.find(name);
 
     if (it == tables_.end())

@@ -17,9 +17,6 @@ enum class ValueType {
 
 using Key = int64_t;
 
-constexpr Key KEY_MIN = std::numeric_limits<Key>::min();
-constexpr Key KEY_MAX = std::numeric_limits<Key>::max();
-
 using Value = std::variant<int64_t, double, std::string>; // either haskell
 
 using NullableValue = std::optional<Value>;

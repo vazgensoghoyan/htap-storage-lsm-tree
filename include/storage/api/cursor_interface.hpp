@@ -44,7 +44,7 @@ public:
      * - !has_value() => NULL
      * - has_value() => значение внутри variant
      */
-    virtual const NullableValue& value(size_t column_idx) const = 0;
+    virtual NullableValue value(size_t column_idx) const = 0;
 };
 
 } // namespace htap::storage
