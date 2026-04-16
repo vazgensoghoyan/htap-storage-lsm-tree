@@ -1,4 +1,4 @@
-#pragma once // storage/model/value.hpp
+#pragma once // storage/api/types.hpp
 
 #include <string>
 #include <variant>
@@ -22,5 +22,7 @@ constexpr Key KEY_MAX = std::numeric_limits<Key>::max();
 using Value = std::variant<int64_t, double, std::string>; // either haskell
 
 using NullableValue = std::optional<Value>;
+
+using Row = std::vector<NullableValue>;
 
 } // namespace htap::storage
