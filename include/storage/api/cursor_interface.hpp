@@ -31,10 +31,6 @@ public:
     // если достигли конца, valid станет возвращать false
     virtual void next() = 0;
 
-    // перейти к первому >= key
-    // если такой нет, то valid() == false
-    virtual void seek(const Key& key) = 0;
-
     // текущий ключ
     virtual Key key() const = 0;
 

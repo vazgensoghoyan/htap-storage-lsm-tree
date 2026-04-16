@@ -7,9 +7,8 @@
 using namespace htap::storage;
 
 void MockStorageEngine::create_table(const std::string& table_name, const Schema& schema) {
-    if (tables_.count(table_name)) {
+    if (tables_.count(table_name))
         throw std::runtime_error("Table already exists");
-    }
 
     tables_.emplace(table_name, Table{schema, {}});
 }
@@ -25,14 +24,12 @@ const Schema& MockStorageEngine::get_table_schema(const std::string& table_name)
 void MockStorageEngine::insert(const std::string& table_name, const Row& values) {
     auto& table = get_table(table_name);
 
-    if (values.size() != table.schema.size()) {
+    if (values.size() != table.schema.size())
         throw std::runtime_error("Row size mismatch schema");
-    }
 
     for (size_t i = 0; i < values.size(); ++i) {
-        if (!table.schema.is_valid_value(i, values[i])) {
+        if (!table.schema.is_valid_value(i, values[i]))
             throw std::runtime_error("Invalid value for column");
-        }
     }
 
     Key key = std::get<int64_t>(*values[table.schema.key_column_index()]);
@@ -88,16 +85,18 @@ std::unique_ptr<ICursor> MockStorageEngine::scan(
 
 MockStorageEngine::Table& MockStorageEngine::get_table(const std::string& name) {
     auto it = tables_.find(name);
-    if (it == tables_.end()) {
+
+    if (it == tables_.end())
         throw std::runtime_error("Table does not exist");
-    }
+
     return it->second;
 }
 
 const MockStorageEngine::Table& MockStorageEngine::get_table(const std::string& name) const {
     auto it = tables_.find(name);
-    if (it == tables_.end()) {
+
+    if (it == tables_.end())
         throw std::runtime_error("Table does not exist");
-    }
+
     return it->second;
 }
