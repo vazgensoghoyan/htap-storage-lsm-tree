@@ -40,7 +40,7 @@ public:
 
     virtual void insert(const std::string& table_name, const Row& values) = 0;
 
-    virtual std::optional<Row> get(
+    virtual std::unique_ptr<ICursor> get(
         const std::string& table_name,
         Key key,
         const std::vector<size_t>& projection) const = 0;

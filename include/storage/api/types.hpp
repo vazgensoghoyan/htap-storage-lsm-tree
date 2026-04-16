@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <limits>
+#include <vector>
 
 namespace htap::storage {
 

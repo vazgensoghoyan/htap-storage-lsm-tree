@@ -1,23 +1,17 @@
 #pragma once // storage/mock/mock_storage_engine.hpp
 
-#include <memory>
 #include <string>
-#include <unordered_map>
+#include <optional>
 #include <map>
 #include <vector>
+#include <memory>
 
 #include "storage/api/storage_engine_interface.hpp"
-#include "storage/model/schema.hpp"
-#include "storage/model/value.hpp"
-#include "storage/mock/mock_cursor.hpp"
 
 namespace htap::storage {
 
-class MockStorageEngine : public IStorageEngine {
+class MockStorageEngine final : public IStorageEngine {
 public:
-    MockStorageEngine() = default;
-    ~MockStorageEngine() override = default;
-
     void create_table(const std::string& table_name, const Schema& schema) override;
 
     bool table_exists(const std::string& table_name) const override;
@@ -26,31 +20,30 @@ public:
 
     void insert(const std::string& table_name, const Row& values) override;
 
-    std::optional<Row> get(
+    std::unique_ptr<ICursor> get(
         const std::string& table_name,
         Key key,
-        const std::vector<size_t>& projection) const override;
+        const std::vector<size_t>& projection
+    ) const override;
 
     std::unique_ptr<ICursor> scan(
         const std::string& table_name,
         std::optional<Key> from,
         std::optional<Key> to,
-        const std::vector<size_t>& projection) const override;
+        const std::vector<size_t>& projection
+    ) const override;
 
 private:
-    struct MockTable {
+    struct Table {
         Schema schema;
-        std::map<Key, Row> rows;
+        std::map<Key, Row> data;
     };
 
-private:
-    // Получить таблицу (ошибка если не существует)
-    MockTable& get_table(const std::string& table_name);
-
-    const MockTable& get_table(const std::string& table_name) const;
+    Table& get_table(const std::string& name);
+    const Table& get_table(const std::string& name) const;
 
 private:
-    std::unordered_map<std::string, MockTable> tables_;
+    std::unordered_map<std::string, Table> tables_;
 };
 
 } // namespace htap::storage

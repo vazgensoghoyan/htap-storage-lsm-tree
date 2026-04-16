@@ -1,14 +1,17 @@
 #include "storage/mock/mock_storage_engine.hpp"
+#include "storage/mock/mock_cursor.hpp"
 
 #include <stdexcept>
+#include <memory>
 
 using namespace htap::storage;
 
 void MockStorageEngine::create_table(const std::string& table_name, const Schema& schema) {
-    if (table_exists(table_name))
+    if (tables_.count(table_name)) {
         throw std::runtime_error("Table already exists");
+    }
 
-    tables_.emplace(table_name, MockTable{schema, {}});
+    tables_.emplace(table_name, Table{schema, {}});
 }
 
 bool MockStorageEngine::table_exists(const std::string& table_name) const {
@@ -21,95 +24,80 @@ const Schema& MockStorageEngine::get_table_schema(const std::string& table_name)
 
 void MockStorageEngine::insert(const std::string& table_name, const Row& values) {
     auto& table = get_table(table_name);
-    const auto& schema = table.schema;
 
-    if (values.size() != schema.size())
-        throw std::runtime_error("Invalid number of values");
+    if (values.size() != table.schema.size()) {
+        throw std::runtime_error("Row size mismatch schema");
+    }
 
     for (size_t i = 0; i < values.size(); ++i) {
-        if (!schema.is_valid_value(i, values[i]))
+        if (!table.schema.is_valid_value(i, values[i])) {
             throw std::runtime_error("Invalid value for column");
+        }
     }
 
-    size_t key_idx = schema.key_column_index();
-
-    if (!values[key_idx].has_value())
-        throw std::runtime_error("Primary key cannot be NULL");
-
-    const Value& key_val = values[key_idx].value();
-
-    if (!std::holds_alternative<int64_t>(key_val))
-        throw std::runtime_error("Primary key must be int64");
-
-    Key key = std::get<int64_t>(key_val);
-
-    table.rows[key] = values;
+    Key key = std::get<int64_t>(*values[table.schema.key_column_index()]);
+    table.data[key] = values;
 }
 
-std::optional<Row> MockStorageEngine::get(
+std::unique_ptr<ICursor> MockStorageEngine::get(
     const std::string& table_name,
     Key key,
-    const std::vector<size_t>& projection) const
-{
+    const std::vector<size_t>& projection
+) const {
     const auto& table = get_table(table_name);
 
-    auto it = table.rows.find(key);
-
-    if (it == table.rows.end()) {
-        return std::nullopt;
+    std::vector<Key> keys;
+    if (table.data.find(key) != table.data.end()) {
+        keys.push_back(key);
     }
 
-    const Row& row = it->second;
-
-    Row projected;
-    projected.reserve(projection.size());
-
-    for (size_t idx : projection) {
-        if (idx >= row.size())
-            throw std::runtime_error("Invalid projection index");
-
-        projected.push_back(row[idx]);
-    }
-
-    return projected;
+    return std::make_unique<MockCursor>(
+        std::move(keys),
+        &table.data,
+        projection
+    );
 }
 
 std::unique_ptr<ICursor> MockStorageEngine::scan(
     const std::string& table_name,
     std::optional<Key> from,
     std::optional<Key> to,
-    const std::vector<size_t>& projection) const
-{
+    const std::vector<size_t>& projection
+) const {
     const auto& table = get_table(table_name);
 
-    Key from_key = from.value_or(KEY_MIN);
-    Key to_key   = to.value_or(KEY_MAX);
+    std::vector<Key> keys;
 
-    if (from_key > to_key)
-        throw std::runtime_error("Invalid scan range");
+    auto it = from ? table.data.lower_bound(*from)
+                   : table.data.begin();
+
+    auto end_it = table.data.end();
+
+    for (; it != end_it; ++it) {
+        if (to && it->first >= *to)
+            break;
+        keys.push_back(it->first);
+    }
 
     return std::make_unique<MockCursor>(
-        table.rows,
-        projection,
-        from_key,
-        to_key
+        std::move(keys),
+        &table.data,
+        projection
     );
 }
 
-MockStorageEngine::MockTable& MockStorageEngine::get_table(const std::string& table_name) {
-    auto it = tables_.find(table_name);
-
-    if (it == tables_.end())
-        throw std::runtime_error("Table not found");
-
+MockStorageEngine::Table& MockStorageEngine::get_table(const std::string& name) {
+    auto it = tables_.find(name);
+    if (it == tables_.end()) {
+        throw std::runtime_error("Table does not exist");
+    }
     return it->second;
 }
 
-const MockStorageEngine::MockTable& MockStorageEngine::get_table(const std::string& table_name) const {
-    auto it = tables_.find(table_name);
-
-    if (it == tables_.end())
-        throw std::runtime_error("Table not found");
-
+const MockStorageEngine::Table& MockStorageEngine::get_table(const std::string& name) const {
+    auto it = tables_.find(name);
+    if (it == tables_.end()) {
+        throw std::runtime_error("Table does not exist");
+    }
     return it->second;
 }
