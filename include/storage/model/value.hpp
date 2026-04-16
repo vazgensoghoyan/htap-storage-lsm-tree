@@ -12,7 +12,7 @@ enum class ValueType {
     STRING
 };
 
-using Key = uint64_t;
+using Key = int64_t;
 
 using Value = std::variant<int64_t, double, std::string>; // either haskell
 

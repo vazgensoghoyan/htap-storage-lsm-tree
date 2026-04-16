@@ -39,7 +39,6 @@ public:
 
     virtual void insert(
         const std::string& table_name,
-        Key key,
         const std::vector<NullableValue>& values) = 0;
 
     virtual std::unique_ptr<ICursor> get(
