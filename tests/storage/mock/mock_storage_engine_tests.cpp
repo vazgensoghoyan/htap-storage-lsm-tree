@@ -5,7 +5,7 @@
 
 using namespace htap::storage;
 
-// -------------------- helpers --------------------
+// -------------------- helper --------------------
 
 static Schema make_schema() {
     return SchemaBuilder()
@@ -13,21 +13,6 @@ static Schema make_schema() {
         .add_column("name", ValueType::STRING, false, true)
         .add_column("age", ValueType::INT64, false, true)
         .build();
-}
-
-static Row make_row(int64_t id, std::string name, std::optional<int64_t> age) {
-    Row r(3);
-
-    r[0] = Value{id};
-    r[1] = name;
-
-    if (age.has_value()) {
-        r[2] = Value{*age};
-    } else {
-        r[2] = std::nullopt;
-    }
-
-    return r;
 }
 
 // -------------------- ENGINE TESTS --------------------
@@ -55,7 +40,7 @@ TEST(MockEngine, InsertAndGetSingleRow) {
     MockStorageEngine engine;
 
     engine.create_table("users", make_schema());
-    engine.insert("users", make_row(1, "Alice", 25));
+    engine.insert("users", {1, "Alice", 25});
 
     auto cursor = engine.get("users", 1, {0, 1, 2});
 
@@ -75,8 +60,8 @@ TEST(MockEngine, InsertOverwritesSameKey) {
 
     engine.create_table("users", make_schema());
 
-    engine.insert("users", make_row(1, "A", 10));
-    engine.insert("users", make_row(1, "B", 20));
+    engine.insert("users", {1, "A", 10});
+    engine.insert("users", {1, "B", 20});
 
     auto cursor = engine.get("users", 1, {0, 1, 2});
 
@@ -89,7 +74,7 @@ TEST(MockEngine, GetMissingKeyIsEmpty) {
     MockStorageEngine engine;
 
     engine.create_table("users", make_schema());
-    engine.insert("users", make_row(1, "A", 10));
+    engine.insert("users", {1, "A", 10});
 
     auto cursor = engine.get("users", 999, {0, 1, 2});
 
@@ -101,9 +86,9 @@ TEST(MockEngine, ScanRangeFiltering) {
 
     engine.create_table("users", make_schema());
 
-    engine.insert("users", make_row(1, "A", 10));
-    engine.insert("users", make_row(2, "B", 20));
-    engine.insert("users", make_row(3, "C", 30));
+    engine.insert("users", {1, "A", 10});
+    engine.insert("users", {2, "B", 20});
+    engine.insert("users", {3, "C", 30});
 
     auto cursor = engine.scan("users", 2, 3, {0, 1});
 
@@ -119,9 +104,9 @@ TEST(MockEngine, ScanFullRangeSortedOrder) {
 
     engine.create_table("users", make_schema());
 
-    engine.insert("users", make_row(3, "C", 30));
-    engine.insert("users", make_row(1, "A", 10));
-    engine.insert("users", make_row(2, "B", 20));
+    engine.insert("users", {3, "C", 30});
+    engine.insert("users", {1, "A", 10});
+    engine.insert("users", {2, "B", 20});
 
     auto cursor = engine.scan("users", std::nullopt, std::nullopt, {0});
 
@@ -141,8 +126,8 @@ TEST(MockEngine, TableIsolation) {
     engine.create_table("a", make_schema());
     engine.create_table("b", make_schema());
 
-    engine.insert("a", make_row(1, "A", 10));
-    engine.insert("b", make_row(1, "B", 20));
+    engine.insert("a", {1, "A", 10});
+    engine.insert("b", {1, "B", 20});
 
     auto ca = engine.get("a", 1, {1});
     auto cb = engine.get("b", 1, {1});
@@ -159,7 +144,7 @@ TEST(MockEngine, InvalidRowSizeThrows) {
 
     engine.create_table("users", make_schema());
 
-    Row bad = make_row(1, "A", 10);
+    Row bad = {1, "A", 10};
     bad.pop_back(); // ломаем schema
 
     EXPECT_THROW(engine.insert("users", bad), std::runtime_error);
@@ -181,7 +166,7 @@ TEST(MockEngine, NullableFieldWorks) {
 
     engine.create_table("users", make_schema());
 
-    engine.insert("users", make_row(1, "Alice", std::nullopt));
+    engine.insert("users", {1, "Alice", std::nullopt});
 
     auto cursor = engine.get("users", 1, {0, 1, 2});
 
@@ -194,8 +179,8 @@ TEST(MockEngine, GetAndScanDoNotInterfere) {
 
     engine.create_table("users", make_schema());
 
-    engine.insert("users", make_row(1, "A", 10));
-    engine.insert("users", make_row(2, "B", 20));
+    engine.insert("users", {1, "A", 10});
+    engine.insert("users", {2, "B", 20});
 
     auto c1 = engine.get("users", 1, {0});
     auto c2 = engine.scan("users", std::nullopt, std::nullopt, {0});

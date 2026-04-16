@@ -4,6 +4,8 @@
 
 using namespace htap::storage;
 
+// -------------------- helper --------------------
+
 static Schema make_schema() {
     return SchemaBuilder()
         .add_column("id", ValueType::INT64, true, false)
@@ -11,6 +13,8 @@ static Schema make_schema() {
         .add_column("name", ValueType::STRING, false, true)
         .build();
 }
+
+// -------------------- SCHEMA TESTS --------------------
 
 TEST(SchemaTest, ReturnsCorrectSize) {
     auto schema = make_schema();
