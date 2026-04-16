@@ -6,7 +6,7 @@
 #include <optional>
 #include <stdexcept>
 
-#include "storage/model/value.hpp"
+#include "storage/api/types.hpp"
 
 namespace htap::storage {
 

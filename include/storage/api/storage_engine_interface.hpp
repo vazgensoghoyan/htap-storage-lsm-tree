@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "storage/model/schema.hpp"
-#include "storage/model/value.hpp"
+#include "storage/api/types.hpp"
 #include "storage/api/cursor_interface.hpp"
 
 namespace htap::storage {
@@ -33,7 +33,7 @@ public:
     virtual const Schema& get_table_schema(const std::string& table_name) const = 0;
 
     // данные должны соответствовать схеме, ошибка в insert иначе
-    // при insert в колонку key не может передаваться null или не int64 
+    // при insert в колонку key не может передаваться null или не int64
     // projection:
     // - содержит уникальные индексы колонок < schema.size()
     // - порядок сохраняется (как в запросе, типо select b, a)
