@@ -24,9 +24,7 @@ public:
 
     const Schema& get_table_schema(const std::string& table_name) const override;
 
-    void insert(
-        const std::string& table_name,
-        const std::vector<NullableValue>& values) override;
+    void insert(const std::string& table_name, const Row& values) override;
 
     std::optional<Row> get(
         const std::string& table_name,
@@ -40,19 +38,19 @@ public:
         const std::vector<size_t>& projection) const override;
 
 private:
-    struct Table {
+    struct MockTable {
         Schema schema;
         std::map<Key, Row> rows;
     };
 
 private:
     // Получить таблицу (ошибка если не существует)
-    Table& get_table(const std::string& table_name);
+    MockTable& get_table(const std::string& table_name);
 
-    const Table& get_table(const std::string& table_name) const;
+    const MockTable& get_table(const std::string& table_name) const;
 
 private:
-    std::unordered_map<std::string, Table> tables_;
+    std::unordered_map<std::string, MockTable> tables_;
 };
 
 } // namespace htap::storage
