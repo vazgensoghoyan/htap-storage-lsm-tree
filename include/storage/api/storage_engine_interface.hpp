@@ -40,9 +40,9 @@ public:
 
     virtual void insert(
         const std::string& table_name,
-        const std::vector<NullableValue>& values) = 0;
+        const Row& values) = 0;
 
-    virtual std::unique_ptr<ICursor> get(
+    virtual std::optional<Row> get(
         const std::string& table_name,
         Key key,
         const std::vector<size_t>& projection) const = 0;
@@ -53,8 +53,8 @@ public:
     // scan(table_name, KEY_MIN, KEY_MAX, projection) или что нужно
     virtual std::unique_ptr<ICursor> scan(
         const std::string& table_name,
-        Key from,
-        Key to,
+        std::optional<Key> from,
+        std::optional<Key> to,
         const std::vector<size_t>& projection) const = 0;
 };
 

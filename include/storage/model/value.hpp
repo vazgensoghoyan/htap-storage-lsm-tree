@@ -23,4 +23,6 @@ using Value = std::variant<int64_t, double, std::string>; // either haskell
 
 using NullableValue = std::optional<Value>;
 
+using Row = std::vector<NullableValue>;
+
 } // namespace htap::storage
