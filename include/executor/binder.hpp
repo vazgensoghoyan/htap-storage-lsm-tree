@@ -19,6 +19,8 @@ private:
     std::unique_ptr<BoundInsertStatement> BindInsert(const parser::InsertStatement& statement) const;
     std::unique_ptr<BoundSelectStatement> BindSelect(const parser::SelectStatement& statement) const;
 
+    storage::ValueType ParserDataTypeToStorageValueType(parser::DataType type) const;
+
 private:
     const storage::IStorageEngine& storage_engine_;
 };
