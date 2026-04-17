@@ -2,10 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <vector>
 
-#include "storage/model/value.hpp"
+#include "storage/api/types.hpp"
 
 namespace htap::storage {
 
@@ -16,7 +15,7 @@ namespace htap::storage {
  * - избежать копирования строк
  * - поддерживать проекцию
  * - эффективно работать с LSM-хранилищем
- * 
+ *
  * Возвращает все подходящие данные в порядке возрастания ключа
  *
  * Курсор принадлежит executor-у через unique_ptr
@@ -32,28 +31,20 @@ public:
     // если достигли конца, valid станет возвращать false
     virtual void next() = 0;
 
-    // перейти к первому >= key
-    // если такой нет, то valid() == false
-    virtual void seek(const Key& key) = 0;
-
     // текущий ключ
     virtual Key key() const = 0;
 
-    // проверить на null колонку
-    // можно только если column_idx принадлежит projection, иначе ошибка
-    virtual bool is_null(size_t column_idx) const = 0;
-
-    // получить значение колонки
-    // если значение NULL то ошибка
-    // можно только если column_idx принадлежит projection, иначе ошибка
-    // column_idx на индекс изначальной схемы, а не проекции
-    virtual const Value& value(size_t column_idx) const = 0;
-
-    // информация о projection
-    // virtual const std::vector<size_t>& projection() const = 0;
-    // пока не уверен  нужен ли этот геттер в интерфейсе
-    // пока закомментировал, чтобы видно было, что уж во внутреннем
-    // представлении projection быть должен для оптимизаций, кажется, это логично
+    /**
+     * Получить значение колонки
+     *
+     * - column_idx — индекс в исходной схеме (НЕ в projection)
+     * - колонка должна входить в projection, иначе ошибка
+     *
+     * Возвращает NullableValue:
+     * - !has_value() => NULL
+     * - has_value() => значение внутри variant
+     */
+    virtual NullableValue value(size_t column_idx) const = 0;
 };
 
 } // namespace htap::storage
