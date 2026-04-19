@@ -20,6 +20,8 @@ private:
     std::unique_ptr<BoundSelectStatement> BindSelect(const parser::SelectStatement& statement) const;
 
     storage::ValueType ParserDataTypeToStorageValueType(parser::DataType type) const;
+    const storage::Schema& GetSchema(const std::string& table_name) const;
+    storage::NullableValue ConvertLiteralExpression(const parser::Expression& expression) const;
 
 private:
     const storage::IStorageEngine& storage_engine_;

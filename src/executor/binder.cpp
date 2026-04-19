@@ -40,6 +40,30 @@ storage::ValueType Binder::ParserDataTypeToStorageValueType(parser::DataType typ
     throw InvalidQueryError("Unsupported data type");
 }
 
+const storage::Schema& Binder::GetSchema(const std::string& table_name) const  {
+    if (!storage_engine_.table_exists(table_name)) {
+        throw TableNotFoundError(table_name);
+    }
+
+    return storage_engine_.get_table_schema(table_name);
+}
+
+storage::NullableValue Binder::ConvertLiteralExpression(const parser::Expression& expression) const {
+    if (const auto* null_literal = dynamic_cast<const parser::NullLiteral*>(&expression)) {
+        return std::nullopt;
+    }
+    if (const auto* int_literal = dynamic_cast<const parser::IntLiteral*>(&expression)) {
+        return int_literal->value;
+    }
+    if (const auto* double_literal = dynamic_cast<const parser::DoubleLiteral*>(&expression)) {
+        return double_literal->value;
+    }
+    if (const auto* string_literal = dynamic_cast<const parser::StringLiteral*>(&expression)) {
+        return string_literal->value;
+    }
+
+    throw InvalidQueryError("Expected literal expression");
+}
 
 std::unique_ptr<BoundCreateTableStatement> Binder::BindCreateTable(
     const parser::CreateTableStatement& statement) const {
@@ -68,8 +92,46 @@ std::unique_ptr<BoundCreateTableStatement> Binder::BindCreateTable(
 
 std::unique_ptr<BoundInsertStatement> Binder::BindInsert(
     const parser::InsertStatement& statement) const {
-    throw InvalidQueryError("BindInsert is not implemented yet");
+    
+    const storage::Schema& schema = GetSchema(statement.table_name);
+
+    if (statement.column_names.size() != statement.values.size()) {
+        throw InvalidQueryError("The number of insert values does not match the number of columns");
+    }
+
+    storage::Row row_values(schema.size(), std::nullopt);
+    std::vector<bool> assigned(schema.size(), false);
+
+    for (std::size_t i = 0; i < statement.column_names.size(); ++i) {
+        const std::string& column_name = statement.column_names[i];
+
+        std::optional<std::size_t> column_index = schema.get_column_index(column_name);
+        if (!column_index.has_value()) {
+            throw ColumnNotFoundError(column_name);
+        }
+
+        if (assigned[*column_index]) {
+            throw InvalidQueryError("Duplicate insert column: " + column_name);
+        }
+
+        row_values[*column_index] = ConvertLiteralExpression(*statement.values[i]);
+        assigned[*column_index] = true;
+    }
+
+    for (std::size_t i = 0; i < schema.size(); ++i) {
+        if (!schema.is_valid_value(i, row_values[i])) {
+            throw TypeMismatchError("Invalid value for column: " + schema.get_column(i).name);
+        }
+    }
+
+    std::unique_ptr<BoundInsertStatement> bound = std::make_unique<BoundInsertStatement>();
+    bound->row_values = std::move(row_values);
+    bound->schema = &schema;
+    bound->table_name = statement.table_name;
+
+    return bound;
 }
+
 std::unique_ptr<BoundSelectStatement> Binder::BindSelect(
     const parser::SelectStatement& statement) const {
     throw InvalidQueryError("BindSelect is not implemented yet");
