@@ -22,12 +22,12 @@ private:
     storage::ValueType ParserDataTypeToStorageValueType(parser::DataType type) const;
     const storage::Schema& GetSchema(const std::string& table_name) const;
     storage::NullableValue ConvertLiteralExpression(const parser::Expression& expression) const;
-    std::unique_ptr<BoundExpression> Binder::BindExpression(const parser::Expression& expression,
+    std::unique_ptr<BoundExpression> BindExpression(const parser::Expression& expression,
         const storage::Schema& schema) const;
     std::vector<std::unique_ptr<BoundSelectItem>> BindSelectItem(const parser::SelectItem& item,
         const storage::Schema& schema) const;
     ExpressionType GetAggregateResultType(parser::AggregateKind kind, ExpressionType argument_type) const;
-    BoundOrderByItem Binder::BindOrderByItem(const parser::OrderByItem& item,const storage::Schema& schema) const;
+    BoundOrderByItem BindOrderByItem(const parser::OrderByItem& item,const storage::Schema& schema) const;
 
     bool HasAggregates(const BoundSelectStatement& statement) const;
     void ValidateWhere(const BoundSelectStatement& statement) const;

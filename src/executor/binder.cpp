@@ -85,7 +85,7 @@ ExpressionType Binder::GetAggregateResultType(parser::AggregateKind kind, Expres
 }
 
 storage::NullableValue Binder::ConvertLiteralExpression(const parser::Expression& expression) const {
-    if (const auto* null_literal = dynamic_cast<const parser::NullLiteral*>(&expression)) {
+    if (dynamic_cast<const parser::NullLiteral*>(&expression)) {
         return std::nullopt;
     }
     if (const auto* int_literal = dynamic_cast<const parser::IntLiteral*>(&expression)) {
@@ -104,7 +104,7 @@ storage::NullableValue Binder::ConvertLiteralExpression(const parser::Expression
 std::unique_ptr<BoundExpression> Binder::BindExpression(const parser::Expression& expression,
     const storage::Schema& schema) const {
 
-    if (const auto* null_literal = dynamic_cast<const parser::NullLiteral*>(&expression)) {
+    if (dynamic_cast<const parser::NullLiteral*>(&expression)) {
         return std::make_unique<BoundLiteralExpression>(std::nullopt, ExpressionType::Null);
     }
 
@@ -233,11 +233,7 @@ std::unique_ptr<BoundCreateTableStatement> Binder::BindCreateTable(
             );
         }
 
-        std::unique_ptr<BoundCreateTableStatement> bound = std::make_unique<BoundCreateTableStatement>();
-        bound->table_name = statement.table_name;
-        bound->schema = builder.build();
-
-        return bound;
+        return std::make_unique<BoundCreateTableStatement>(statement.table_name, builder.build());
 
     } catch (const std::exception& e) {
         throw InvalidQueryError(e.what());

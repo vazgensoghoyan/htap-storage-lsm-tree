@@ -17,6 +17,11 @@ struct BoundStatement {
 };
 
 struct BoundCreateTableStatement : BoundStatement {
+    BoundCreateTableStatement(std::string table_name, storage::Schema schema)
+        : table_name(std::move(table_name)),
+          schema(std::move(schema)) {
+    }
+
     std::string table_name;
     storage::Schema schema;
 };
