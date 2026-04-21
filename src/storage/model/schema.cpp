@@ -2,10 +2,7 @@
 
 using namespace htap::storage;
 
-Schema::Schema(std::vector<Column> columns, size_t key_index)
-    : columns_(std::move(columns)),
-      key_index_(key_index)
-{
+Schema::Schema(std::vector<Column> columns) : columns_(std::move(columns)) {
     for (size_t i = 0; i < columns_.size(); ++i)
         name_to_index_[columns_[i].name] = i;
 }
@@ -32,10 +29,6 @@ std::optional<size_t> Schema::get_column_index(const std::string& name) const no
         return std::nullopt;
 
     return it->second;
-}
-
-size_t Schema::key_column_index() const noexcept {
-    return key_index_;
 }
 
 bool Schema::is_valid_value(size_t column_index, const NullableValue& value) const {
