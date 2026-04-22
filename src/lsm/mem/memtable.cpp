@@ -29,6 +29,6 @@ size_t MemTable::size() const noexcept {
     return data_.size();
 }
 
-std::unique_ptr<ImmutableMemTable> MemTable::freeze() {
-    return std::make_unique<ImmutableMemTable>(std::move(data_));
+MemTable::Map&& MemTable::extract() noexcept {
+    return std::move(data_);
 }

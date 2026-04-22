@@ -2,9 +2,9 @@
 
 #include <map>
 #include <optional>
-#include <memory>
 
 #include "storage/api/types.hpp"
+#include "lsmtree/mem/memtable.hpp"
 
 namespace htap::lsmtree {
 
@@ -14,11 +14,12 @@ public:
     using Iterator = Map::const_iterator;
 
 public:
-    explicit ImmutableMemTable(Map&& data);
+    explicit ImmutableMemTable(Map&& mem);
 
     std::optional<storage::Row> get(storage::Key key) const;
 
     Iterator lower_bound(storage::Key key) const;
+
     Iterator begin() const noexcept;
     Iterator end() const noexcept;
 
