@@ -1,23 +1,20 @@
-#pragma once // lsmtree/mem/memtable.hpp
+#pragma once // lsmtree/mem/imm_memtable.hpp
 
 #include <map>
 #include <optional>
 #include <memory>
 
 #include "storage/api/types.hpp"
-#include "lsmtree/mem/imm_memtable.hpp"
 
 namespace htap::lsmtree {
 
-class MemTable {
+class ImmutableMemTable {
 public:
     using Map = std::map<storage::Key, storage::Row>;
     using Iterator = Map::const_iterator;
 
 public:
-    MemTable() = default;
-
-    void insert(storage::Key key, const storage::Row& row);
+    explicit ImmutableMemTable(Map&& data);
 
     std::optional<storage::Row> get(storage::Key key) const;
 
@@ -26,8 +23,6 @@ public:
     Iterator end() const noexcept;
 
     size_t size() const noexcept;
-
-    std::unique_ptr<ImmutableMemTable> freeze();
 
 private:
     Map data_;
