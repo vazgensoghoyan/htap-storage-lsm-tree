@@ -17,6 +17,14 @@ enum class ExpressionType {
     Null
 };
 
+enum class BoundExpressionKind {
+    Literal,
+    Column,
+    Unary,
+    Binary,
+    IsNull
+};
+
 constexpr ExpressionType ValueTypeToExpressionType(storage::ValueType type) {
     switch (type) {
         case storage::ValueType::INT64:
@@ -31,29 +39,31 @@ constexpr ExpressionType ValueTypeToExpressionType(storage::ValueType type) {
 }
 
 struct BoundExpression {
-    explicit BoundExpression(ExpressionType type)
-        : type(type) {
-        }
+    explicit BoundExpression(BoundExpressionKind kind, ExpressionType type)
+        : kind(kind),
+        type(type) {
+    }
 
     virtual ~BoundExpression() = default;
 
+    BoundExpressionKind kind;
     ExpressionType type;
 };
 
 struct BoundLiteralExpression : BoundExpression {
     BoundLiteralExpression(storage::NullableValue value, ExpressionType type)
-        : BoundExpression(type),
+        : BoundExpression(BoundExpressionKind::Literal, type),
         value(std::move(value)) {
-        }
+    }
 
     storage::NullableValue value;
 };
 
 struct BoundColumnExpression : BoundExpression {
     BoundColumnExpression(std::size_t column_index, storage::ValueType type)
-        : BoundExpression(ValueTypeToExpressionType(type)),
+        : BoundExpression(BoundExpressionKind::Column, ValueTypeToExpressionType(type)),
         column_index(column_index) {
-        }
+    }
 
     std::size_t column_index;
 };
@@ -62,10 +72,10 @@ struct BoundUnaryExpression : BoundExpression {
     BoundUnaryExpression(
         parser::UnaryOperation operation,
         std::unique_ptr<BoundExpression> expression)
-        : BoundExpression(ExpressionType::Boolean),
+        : BoundExpression(BoundExpressionKind::Unary, ExpressionType::Boolean),
         operation(operation),
         expression(std::move(expression)) {
-        }
+    }
 
     parser::UnaryOperation operation;
     std::unique_ptr<BoundExpression> expression;
@@ -76,11 +86,11 @@ struct BoundBinaryExpression : BoundExpression {
         parser::BinaryOperation operation,
         std::unique_ptr<BoundExpression> left,
         std::unique_ptr<BoundExpression> right)
-        : BoundExpression(ExpressionType::Boolean),
+        : BoundExpression(BoundExpressionKind::Binary, ExpressionType::Boolean),
         operation(operation),
         left(std::move(left)),
         right(std::move(right)) {
-        }
+    }
 
     parser::BinaryOperation operation;
     std::unique_ptr<BoundExpression> left;
@@ -91,10 +101,10 @@ struct BoundIsNullExpression : BoundExpression {
     BoundIsNullExpression(
         std::unique_ptr<BoundExpression> expression,
         bool is_not)
-        : BoundExpression(ExpressionType::Boolean),
+        : BoundExpression(BoundExpressionKind::IsNull, ExpressionType::Boolean),
         expression(std::move(expression)),
         is_not(is_not) {
-        }
+    }
 
     std::unique_ptr<BoundExpression> expression;
     bool is_not;

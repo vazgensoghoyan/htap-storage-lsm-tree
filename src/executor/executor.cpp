@@ -198,51 +198,56 @@ void Executor::CollectProjectionFromExpression(
         std::vector<bool>& used_columns
     ) const {
     
-    if (dynamic_cast<const BoundLiteralExpression*>(&expression)) {
-        return;
-    }
+    switch (expression.kind) {
+        case BoundExpressionKind::Literal:
+            return;
 
-    if (const auto* column = dynamic_cast<const BoundColumnExpression*>(&expression)) {
-        if (!used_columns[column->column_index]) {
-            used_columns[column->column_index] = true;
-            projection.push_back(column->column_index);
+        case BoundExpressionKind::Column: {
+            const auto& column = static_cast<const BoundColumnExpression&>(expression);
+            if (!used_columns[column.column_index]) {
+                used_columns[column.column_index] = true;
+                projection.push_back(column.column_index);
+            }
+            return;
         }
-        return;
-    }
 
-    if (const auto* unary = dynamic_cast<const BoundUnaryExpression*>(&expression)) {
-        CollectProjectionFromExpression(
-            *unary->expression,
-            projection,
-            used_columns
-        );
-        return;
-    }
+        case BoundExpressionKind::Unary: {
+            const auto& unary = static_cast<const BoundUnaryExpression&>(expression);
+            CollectProjectionFromExpression(
+                *unary.expression,
+                projection,
+                used_columns
+            );
+            return;
+        }
 
-    if (const auto* binary = dynamic_cast<const BoundBinaryExpression*>(&expression)) {
-        CollectProjectionFromExpression(
-            *binary->left,
-            projection,
-            used_columns
-        );
-        CollectProjectionFromExpression(
-            *binary->right,
-            projection,
-            used_columns
-        );
-        return;
-    }
+        case BoundExpressionKind::Binary: {
+            const auto& binary = static_cast<const BoundBinaryExpression&>(expression);
+            CollectProjectionFromExpression(
+                *binary.left,
+                projection,
+                used_columns
+            );
+            CollectProjectionFromExpression(
+                *binary.right,
+                projection,
+                used_columns
+            );
+            return;
+        }
 
-    if (const auto* is_null = dynamic_cast<const BoundIsNullExpression*>(&expression)) {
-        CollectProjectionFromExpression(
-            *is_null->expression,
-            projection,
-            used_columns
-        );
-        return;
-    }
+        case BoundExpressionKind::IsNull: {
+            const auto& is_null = static_cast<const BoundIsNullExpression&>(expression);
+            CollectProjectionFromExpression(
+                *is_null.expression,
+                projection,
+                used_columns
+            );
+            return;
+        }
 
-    throw std::runtime_error("Unsupported bound expression");
+    }
+    throw std::runtime_error("Unsupported bound expression kind");
 
 }
 
