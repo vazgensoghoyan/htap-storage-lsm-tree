@@ -66,7 +66,7 @@ storage::MockStorageEngine MakeEngineWithUsersData() {
     InsertUser(engine, 2,  std::string("Bob"),   25, std::nullopt);
     InsertUser(engine, 3,  std::nullopt,         17, 2000.0);
     InsertUser(engine, 4,  std::string("Carl"),  19, 1500.0);
-    InsertUser(engine, 40, std::string("Dasha"), 18, 5000.0);
+    InsertUser(engine, 40, std::string("Dasha"), 19, 5000.0);
 
     return engine;
 }
@@ -120,6 +120,16 @@ std::unique_ptr<parser::SelectItem> MakeSelectItemExpr(
 ) {
     auto item = std::make_unique<parser::SelectItemExpression>();
     item->expression = std::move(expr);
+    return item;
+}
+
+parser::OrderByItem MakeOrderByItem(
+    std::unique_ptr<parser::Expression> expr,
+    parser::OrderDirection direction = parser::OrderDirection::Asc
+) {
+    parser::OrderByItem item;
+    item.expression = std::move(expr);
+    item.direction = direction;
     return item;
 }
 
@@ -414,4 +424,256 @@ TEST(ExecutorPlainSelect, EvaluatesNotExpressionInWhere) {
     EXPECT_EQ(GetInt(result.rows[1], 0), 3);
     EXPECT_EQ(GetInt(result.rows[2], 0), 4);
     EXPECT_EQ(GetInt(result.rows[3], 0), 40);
+}
+
+TEST(ExecutorPlainSelect, OrdersByColumnAscending) {
+    auto engine = MakeEngineWithUsersData();
+
+    parser::SelectStatement statement;
+    statement.table_name = "users";
+    statement.select_items.push_back(MakeSelectItemExpr(MakeColumnExpr("id")));
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("age"), parser::OrderDirection::Asc)
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("id"), parser::OrderDirection::Asc)
+    );
+
+    executor::SelectResult result = ExecutePlainSelect(engine, statement);
+
+    ASSERT_EQ(result.rows.size(), 5u);
+    EXPECT_EQ(GetInt(result.rows[0], 0), 3);
+    EXPECT_EQ(GetInt(result.rows[1], 0), 1);
+    EXPECT_EQ(GetInt(result.rows[2], 0), 4);
+    EXPECT_EQ(GetInt(result.rows[3], 0), 40);
+    EXPECT_EQ(GetInt(result.rows[4], 0), 2);
+}
+
+TEST(ExecutorPlainSelect, OrdersByColumnDescending) {
+    auto engine = MakeEngineWithUsersData();
+
+    parser::SelectStatement statement;
+    statement.table_name = "users";
+    statement.select_items.push_back(MakeSelectItemExpr(MakeColumnExpr("id")));
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("age"), parser::OrderDirection::Desc)
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("id"), parser::OrderDirection::Asc)
+    );
+
+    executor::SelectResult result = ExecutePlainSelect(engine, statement);
+
+    ASSERT_EQ(result.rows.size(), 5u);
+    EXPECT_EQ(GetInt(result.rows[0], 0), 2);
+    EXPECT_EQ(GetInt(result.rows[1], 0), 1);
+    EXPECT_EQ(GetInt(result.rows[2], 0), 4);
+    EXPECT_EQ(GetInt(result.rows[3], 0), 40);
+    EXPECT_EQ(GetInt(result.rows[4], 0), 3);
+}
+
+TEST(ExecutorPlainSelect, OrdersByNonSelectedExpression) {
+    auto engine = MakeEngineWithUsersData();
+
+    parser::SelectStatement statement;
+    statement.table_name = "users";
+    statement.select_items.push_back(MakeSelectItemExpr(MakeColumnExpr("name")));
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("age"), parser::OrderDirection::Asc)
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("id"), parser::OrderDirection::Asc)
+    );
+
+    executor::SelectResult result = ExecutePlainSelect(engine, statement);
+
+    ASSERT_EQ(result.rows.size(), 5u);
+    EXPECT_FALSE(result.rows[0][0].has_value());
+    EXPECT_EQ(GetString(result.rows[1], 0), "Ann");
+    EXPECT_EQ(GetString(result.rows[2], 0), "Carl");
+    EXPECT_EQ(GetString(result.rows[3], 0), "Dasha");
+    EXPECT_EQ(GetString(result.rows[4], 0), "Bob");
+}
+
+TEST(ExecutorPlainSelect, OrdersByColumnWithLimit) {
+    auto engine = MakeEngineWithUsersData();
+
+    parser::SelectStatement statement;
+    statement.table_name = "users";
+    statement.select_items.push_back(MakeSelectItemExpr(MakeColumnExpr("id")));
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("age"), parser::OrderDirection::Asc)
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("id"), parser::OrderDirection::Asc)
+    );
+    statement.limit = 2;
+
+    executor::SelectResult result = ExecutePlainSelect(engine, statement);
+
+    ASSERT_EQ(result.rows.size(), 2u);
+    EXPECT_EQ(GetInt(result.rows[0], 0), 3);
+    EXPECT_EQ(GetInt(result.rows[1], 0), 1);
+}
+
+TEST(ExecutorPlainSelect, OrdersNullsLastInAscendingOrder) {
+    auto engine = MakeEngineWithUsersData();
+
+    parser::SelectStatement statement;
+    statement.table_name = "users";
+    statement.select_items.push_back(MakeSelectItemExpr(MakeColumnExpr("id")));
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("salary"), parser::OrderDirection::Asc)
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("id"), parser::OrderDirection::Asc)
+    );
+
+    executor::SelectResult result = ExecutePlainSelect(engine, statement);
+
+    ASSERT_EQ(result.rows.size(), 5u);
+    EXPECT_EQ(GetInt(result.rows[0], 0), 1);
+    EXPECT_EQ(GetInt(result.rows[1], 0), 4);
+    EXPECT_EQ(GetInt(result.rows[2], 0), 3);
+    EXPECT_EQ(GetInt(result.rows[3], 0), 40);
+    EXPECT_EQ(GetInt(result.rows[4], 0), 2);
+}
+
+TEST(ExecutorPlainSelect, OrdersByMultipleColumnsWithMixedDirections) {
+    auto engine = MakeEngineWithUsersData();
+
+    parser::SelectStatement statement;
+    statement.table_name = "users";
+    statement.select_items.push_back(MakeSelectItemExpr(MakeColumnExpr("id")));
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("age"), parser::OrderDirection::Asc)
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("name"), parser::OrderDirection::Desc)
+    );
+
+    executor::SelectResult result = ExecutePlainSelect(engine, statement);
+
+    ASSERT_EQ(result.rows.size(), 5u);
+    EXPECT_EQ(GetInt(result.rows[0], 0), 3);
+    EXPECT_EQ(GetInt(result.rows[1], 0), 40);
+    EXPECT_EQ(GetInt(result.rows[2], 0), 4);
+    EXPECT_EQ(GetInt(result.rows[3], 0), 1);
+    EXPECT_EQ(GetInt(result.rows[4], 0), 2);
+}
+
+TEST(ExecutorPlainSelect, AppliesWhereThenOrdersByAnotherColumn) {
+    auto engine = MakeEngineWithUsersData();
+
+    parser::SelectStatement statement;
+    statement.table_name = "users";
+    statement.select_items.push_back(MakeSelectItemExpr(MakeColumnExpr("id")));
+    statement.where_expression = MakeBinaryExpr(
+        parser::BinaryOperation::Less,
+        MakeColumnExpr("age"),
+        MakeIntLiteral(25)
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("salary"), parser::OrderDirection::Desc)
+    );
+
+    executor::SelectResult result = ExecutePlainSelect(engine, statement);
+
+    ASSERT_EQ(result.rows.size(), 4u);
+    EXPECT_EQ(GetInt(result.rows[0], 0), 40);
+    EXPECT_EQ(GetInt(result.rows[1], 0), 3);
+    EXPECT_EQ(GetInt(result.rows[2], 0), 4);
+    EXPECT_EQ(GetInt(result.rows[3], 0), 1);
+}
+
+TEST(ExecutorPlainSelect, OrdersByBooleanExpression) {
+    auto engine = MakeEngineWithUsersData();
+
+    parser::SelectStatement statement;
+    statement.table_name = "users";
+    statement.select_items.push_back(MakeSelectItemExpr(MakeColumnExpr("id")));
+    statement.order_by_items.push_back(
+        MakeOrderByItem(
+            MakeIsNullExpr(MakeColumnExpr("name"), false),
+            parser::OrderDirection::Asc
+        )
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("id"), parser::OrderDirection::Asc)
+    );
+
+    executor::SelectResult result = ExecutePlainSelect(engine, statement);
+
+    ASSERT_EQ(result.rows.size(), 5u);
+    EXPECT_EQ(GetInt(result.rows[0], 0), 1);
+    EXPECT_EQ(GetInt(result.rows[1], 0), 2);
+    EXPECT_EQ(GetInt(result.rows[2], 0), 4);
+    EXPECT_EQ(GetInt(result.rows[3], 0), 40);
+    EXPECT_EQ(GetInt(result.rows[4], 0), 3);
+}
+
+TEST(ExecutorPlainSelect, AppliesWhereOrderByAndLimitTogether) {
+    auto engine = MakeEngineWithUsersData();
+
+    parser::SelectStatement statement;
+    statement.table_name = "users";
+    statement.select_items.push_back(MakeSelectItemExpr(MakeColumnExpr("id")));
+    statement.where_expression = MakeBinaryExpr(
+        parser::BinaryOperation::Equal,
+        MakeColumnExpr("age"),
+        MakeIntLiteral(19)
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("name"), parser::OrderDirection::Desc)
+    );
+    statement.limit = 2;
+
+    executor::SelectResult result = ExecutePlainSelect(engine, statement);
+
+    ASSERT_EQ(result.rows.size(), 2u);
+    EXPECT_EQ(GetInt(result.rows[0], 0), 40);
+    EXPECT_EQ(GetInt(result.rows[1], 0), 4);
+}
+
+TEST(ExecutorPlainSelect, UsesRangeScanResidualFilterAndOrderBy) {
+    auto engine = MakeEngineWithUsersData();
+
+    parser::SelectStatement statement;
+    statement.table_name = "users";
+    statement.select_items.push_back(MakeSelectItemExpr(MakeColumnExpr("id")));
+    statement.where_expression = MakeBinaryExpr(
+        parser::BinaryOperation::And,
+        MakeBinaryExpr(
+            parser::BinaryOperation::And,
+            MakeBinaryExpr(
+                parser::BinaryOperation::GreaterEqual,
+                MakeColumnExpr("id"),
+                MakeIntLiteral(1)
+            ),
+            MakeBinaryExpr(
+                parser::BinaryOperation::LessEqual,
+                MakeColumnExpr("id"),
+                MakeIntLiteral(40)
+            )
+        ),
+        MakeBinaryExpr(
+            parser::BinaryOperation::Less,
+            MakeColumnExpr("age"),
+            MakeIntLiteral(25)
+        )
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("age"), parser::OrderDirection::Asc)
+    );
+    statement.order_by_items.push_back(
+        MakeOrderByItem(MakeColumnExpr("id"), parser::OrderDirection::Desc)
+    );
+
+    executor::SelectResult result = ExecutePlainSelect(engine, statement);
+
+    ASSERT_EQ(result.rows.size(), 4u);
+    EXPECT_EQ(GetInt(result.rows[0], 0), 3);
+    EXPECT_EQ(GetInt(result.rows[1], 0), 40);
+    EXPECT_EQ(GetInt(result.rows[2], 0), 4);
+    EXPECT_EQ(GetInt(result.rows[3], 0), 1);
 }
