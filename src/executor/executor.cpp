@@ -1,4 +1,5 @@
 #include <stdexcept>
+#include <functional>
 
 #include "executor/executor.hpp"
 
@@ -273,5 +274,198 @@ bool Executor::CanApplyEarlyLimit(const BoundSelectStatement& statement) const {
     return true;
 }
 
+SelectResult Executor::ExecutePlainSelect(
+    const BoundSelectStatement& statement,
+    const std::vector<std::string>& column_names,
+    const std::vector<std::size_t>& projection,
+    bool can_apply_early_limit
+) {
+    if (!statement.schema) {
+        throw std::runtime_error("BoundSelectStatement schema is null");
+    }
+
+    SelectResult result;
+    result.column_names = column_names;
+
+    std::unique_ptr<storage::ICursor> cursor;
+
+    std::vector<const BoundExpression*> conjuncts;
+    if (statement.where_expression) {
+        CollectConjuncts(*statement.where_expression, conjuncts);
+    }
+
+    std::optional<storage::Key> point_key;
+    bool found_point_lookup = false;
+
+    std::optional<storage::Key> from;
+    std::optional<storage::Key> to;
+    bool found_any_range_predicate = false;
+
+    bool empty_result = false;
+
+    for (const BoundExpression* conjunct : conjuncts) {
+        if (conjunct->kind != BoundExpressionKind::Binary) {
+            continue;
+        }
+
+        const auto& binary = static_cast<const BoundBinaryExpression&>(*conjunct);
+
+        const BoundExpression* left = binary.left.get();
+        const BoundExpression* right = binary.right.get();
+
+        const BoundColumnExpression* key_column = nullptr;
+        const BoundLiteralExpression* key_literal = nullptr;
+        bool column_on_left = false;
+
+        if (left->kind == BoundExpressionKind::Column && right->kind == BoundExpressionKind::Literal) {
+            key_column = static_cast<const BoundColumnExpression*>(left);
+            key_literal = static_cast<const BoundLiteralExpression*>(right);
+            column_on_left = true;
+        } else if (left->kind == BoundExpressionKind::Literal && right->kind == BoundExpressionKind::Column) {
+            key_column = static_cast<const BoundColumnExpression*>(right);
+            key_literal = static_cast<const BoundLiteralExpression*>(left);
+            column_on_left = false;
+        } else {
+            continue;
+        }
+
+        if (!statement.schema->get_column(key_column->column_index).is_key) {
+            continue;
+        }
+
+        if (!key_literal->value.has_value()) {
+            empty_result = true;
+            break;
+        }
+
+        storage::Key key = std::get<std::int64_t>(*key_literal->value);
+
+        switch (binary.operation) {
+            case parser::BinaryOperation::Equal:
+                if (!found_point_lookup) {
+                    point_key = key;
+                    found_point_lookup = true;
+                } else if (*point_key != key) {
+                    empty_result = true;
+                }
+                break;
+
+            case parser::BinaryOperation::Greater:
+                found_any_range_predicate = true;
+                if (column_on_left) {
+                    if (key == std::numeric_limits<std::int64_t>::max()) {
+                        empty_result = true;
+                    } else if (!from.has_value() || key + 1 > *from) {
+                        from = key + 1;
+                    }
+                } else {
+                    if (!to.has_value() || key < *to) {
+                        to = key;
+                    }
+                }
+                break;
+
+            case parser::BinaryOperation::GreaterEqual:
+                found_any_range_predicate = true;
+                if (column_on_left) {
+                    if (!from.has_value() || key > *from) {
+                        from = key;
+                    }
+                } else {
+                    if (key != std::numeric_limits<std::int64_t>::max()) {
+                        if (!to.has_value() || key + 1 < *to) {
+                            to = key + 1;
+                        }
+                    }
+                }
+                break;
+
+            case parser::BinaryOperation::Less:
+                found_any_range_predicate = true;
+                if (column_on_left) {
+                    if (!to.has_value() || key < *to) {
+                        to = key;
+                    }
+                } else {
+                    if (key == std::numeric_limits<std::int64_t>::max()) {
+                        empty_result = true;
+                    } else if (!from.has_value() || key + 1 > *from) {
+                        from = key + 1;
+                    }
+                }
+                break;
+
+            case parser::BinaryOperation::LessEqual:
+                found_any_range_predicate = true;
+                if (column_on_left) {
+                    if (key != std::numeric_limits<std::int64_t>::max()) {
+                        if (!to.has_value() || key + 1 < *to) {
+                            to = key + 1;
+                        }
+                    }
+                } else {
+                    if (!from.has_value() || key > *from) {
+                        from = key;
+                    }
+                }
+                break;
+
+            default:
+                break;
+        }
+
+        if (empty_result) break;
+    }
+
+    if (empty_result) return result;
+
+
+    if (found_point_lookup) {
+        cursor = storage_engine_.get(
+            statement.table_name,
+            *point_key,
+            projection
+        );
+    } else if (found_any_range_predicate) {
+        if (from.has_value() && to.has_value() && *from >= *to) {
+            return result;
+        }
+
+        cursor = storage_engine_.scan(
+            statement.table_name,
+            from,
+            to,
+            projection
+        );
+    } else {
+        cursor = storage_engine_.scan(
+            statement.table_name,
+            std::nullopt,
+            std::nullopt,
+            projection
+        );
+    }
+
+    while (cursor->valid()) {
+
+        cursor->next();
+    }
+
+    return result;
 }
 
+void CollectConjuncts(const BoundExpression& expression, std::vector<const BoundExpression*>& conjuncts) {
+    if (expression.kind == BoundExpressionKind::Binary) {
+        const auto& binary = static_cast<const BoundBinaryExpression&>(expression);
+
+        if (binary.operation == parser::BinaryOperation::And) {
+            CollectConjuncts(*binary.left, conjuncts);
+            CollectConjuncts(*binary.right, conjuncts);
+            return;
+        }
+    }
+
+    conjuncts.push_back(&expression);
+}
+
+}
