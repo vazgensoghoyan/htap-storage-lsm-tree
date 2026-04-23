@@ -47,6 +47,16 @@ private:
     bool HasAggregateSelectItems(const BoundSelectStatement& statement) const;
     bool CanApplyEarlyLimit(const BoundSelectStatement& statement) const;
 
+    bool EvaluatePredicate(
+        const BoundExpression& expression,
+        const storage::ICursor& cursor
+    ) const;
+
+    NullableResultValue EvaluateExpression(
+        const BoundExpression& expression,
+        const storage::ICursor& cursor
+    ) const;
+
 private:
     storage::IStorageEngine& storage_engine_;
 };

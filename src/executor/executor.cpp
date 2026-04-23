@@ -1,9 +1,88 @@
 #include <stdexcept>
 #include <functional>
+#include <limits>
 
 #include "executor/executor.hpp"
 
 namespace htap::executor {
+
+
+namespace {
+
+void CollectConjuncts(const BoundExpression& expression, std::vector<const BoundExpression*>& conjuncts) {
+    if (expression.kind == BoundExpressionKind::Binary) {
+        const auto& binary = static_cast<const BoundBinaryExpression&>(expression);
+
+        if (binary.operation == parser::BinaryOperation::And) {
+            CollectConjuncts(*binary.left, conjuncts);
+            CollectConjuncts(*binary.right, conjuncts);
+            return;
+        }
+    }
+
+    conjuncts.push_back(&expression);
+}
+
+int CompareResultValues(const ResultValue& left, const ResultValue& right) {
+    if (const auto* left_int = std::get_if<std::int64_t>(&left)) {
+        if (const auto* right_int = std::get_if<std::int64_t>(&right)) {
+            if (*left_int < *right_int) return -1;
+            if (*left_int > *right_int) return 1;
+            return 0;
+        }
+
+        if (const auto* right_double = std::get_if<double>(&right)) {
+            double left_value = static_cast<double>(*left_int);
+            if (left_value < *right_double) return -1;
+            if (left_value > *right_double) return 1;
+            return 0;
+        }
+
+        throw std::runtime_error("Incompatible types in comparison");
+    }
+
+    if (const auto* left_double = std::get_if<double>(&left)) {
+        if (const auto* right_double = std::get_if<double>(&right)) {
+            if (*left_double < *right_double) return -1;
+            if (*left_double > *right_double) return 1;
+            return 0;
+        }
+
+        if (const auto* right_int = std::get_if<std::int64_t>(&right)) {
+            double right_value = static_cast<double>(*right_int);
+            if (*left_double < right_value) return -1;
+            if (*left_double > right_value) return 1;
+            return 0;
+        }
+
+        throw std::runtime_error("Incompatible types in comparison");
+    }
+
+    if (const auto* left_string = std::get_if<std::string>(&left)) {
+        const auto* right_string = std::get_if<std::string>(&right);
+        if (!right_string) {
+            throw std::runtime_error("Incompatible types in comparison");
+        }
+
+        if (*left_string < *right_string) return -1;
+        if (*left_string > *right_string) return 1;
+        return 0;
+    }
+
+    if (const auto* left_bool = std::get_if<bool>(&left)) {
+        const auto* right_bool = std::get_if<bool>(&right);
+        if (!right_bool) {
+            throw std::runtime_error("Incompatible types in comparison");
+        }
+
+        if (*left_bool == *right_bool) return 0;
+        return *left_bool ? 1 : -1;
+    }
+
+    throw std::runtime_error("Unsupported value type in comparison");
+}
+
+}
 
 Executor::Executor(storage::IStorageEngine& storage_engine) 
     : storage_engine_(storage_engine) {
@@ -448,24 +527,253 @@ SelectResult Executor::ExecutePlainSelect(
 
     while (cursor->valid()) {
 
+        if (statement.where_expression && !EvaluatePredicate(*statement.where_expression, *cursor)) {
+            cursor->next();
+            continue;
+        }
+
+        ResultRow row;
+        row.reserve(statement.select_items.size());
+
+        for (const auto& item : statement.select_items) {
+            const auto* expression_item = dynamic_cast<const BoundSelectItemExpression*>(item.get());
+
+            if (!expression_item) {
+                throw std::runtime_error("Plain SELECT does not support aggregate select items");
+            }
+
+            row.push_back(EvaluateExpression(*expression_item->expression, *cursor));
+
+        }
+        result.rows.push_back(std::move(row));
+
+        if (can_apply_early_limit && statement.limit.has_value() &&
+            result.rows.size() >= *statement.limit) {
+            break;
+        }
+
         cursor->next();
+    }
+
+    if (!can_apply_early_limit && statement.limit.has_value()) {
+        if (result.rows.size() > *statement.limit) {
+            result.rows.resize(*statement.limit);
+        }
     }
 
     return result;
 }
 
-void CollectConjuncts(const BoundExpression& expression, std::vector<const BoundExpression*>& conjuncts) {
-    if (expression.kind == BoundExpressionKind::Binary) {
-        const auto& binary = static_cast<const BoundBinaryExpression&>(expression);
+bool Executor::EvaluatePredicate(const BoundExpression& expression, const storage::ICursor& cursor) const {
+    NullableResultValue value = EvaluateExpression(expression, cursor);
 
-        if (binary.operation == parser::BinaryOperation::And) {
-            CollectConjuncts(*binary.left, conjuncts);
-            CollectConjuncts(*binary.right, conjuncts);
-            return;
+    if (!value.has_value()) return false;
+
+    if (const auto* boolean_value = std::get_if<bool>(&*value)) {
+        return *boolean_value;
+    }
+
+    throw std::runtime_error("WHERE expression must evaluate to BOOLEAN");
+}
+
+NullableResultValue Executor::EvaluateExpression(
+    const BoundExpression& expression,
+    const storage::ICursor& cursor
+) const {
+    switch (expression.kind) {
+        case BoundExpressionKind::Literal: {
+            const auto& literal = static_cast<const BoundLiteralExpression&>(expression);
+
+            if (!literal.value.has_value()) {
+                return std::nullopt;
+            }
+
+            return std::visit(
+                [](const auto& value) -> ResultValue {
+                    return value;
+                },
+                *literal.value
+            );
+        }
+
+        case BoundExpressionKind::Column: {
+            const auto& column = static_cast<const BoundColumnExpression&>(expression);
+            storage::NullableValue value = cursor.value(column.column_index);
+
+            if (!value.has_value()) {
+                return std::nullopt;
+            }
+
+            return std::visit(
+                [](const auto& inner_value) -> ResultValue {
+                    return inner_value;
+                },
+                *value
+            );
+        }
+
+        case BoundExpressionKind::Unary: {
+            const auto& unary = static_cast<const BoundUnaryExpression&>(expression);
+
+            NullableResultValue value = EvaluateExpression(*unary.expression, cursor);
+
+            if (!value.has_value()) {
+                return std::nullopt;
+            }
+
+            const auto* boolean_value = std::get_if<bool>(&*value);
+            if (!boolean_value) {
+                throw std::runtime_error("Unary NOT expects BOOLEAN");
+            }
+
+            switch (unary.operation) {
+                case parser::UnaryOperation::Not:
+                    return !(*boolean_value);
+            }
+
+            throw std::runtime_error("Unsupported unary operation");
+        }
+
+        case BoundExpressionKind::Binary: {
+            const auto& binary = static_cast<const BoundBinaryExpression&>(expression);
+
+            if (binary.operation == parser::BinaryOperation::And) {
+                NullableResultValue left = EvaluateExpression(*binary.left, cursor);
+                NullableResultValue right = EvaluateExpression(*binary.right, cursor);
+
+                if (left.has_value()) {
+                    const auto* left_bool = std::get_if<bool>(&*left);
+                    if (!left_bool) {
+                        throw std::runtime_error("AND expects BOOLEAN operands");
+                    }
+
+                    if (!*left_bool) {
+                        return false;
+                    }
+                }
+
+                if (right.has_value()) {
+                    const auto* right_bool = std::get_if<bool>(&*right);
+                    if (!right_bool) {
+                        throw std::runtime_error("AND expects BOOLEAN operands");
+                    }
+
+                    if (!*right_bool) {
+                        return false;
+                    }
+                }
+
+                if (!left.has_value() || !right.has_value()) {
+                    return std::nullopt;
+                }
+
+                return true;
+            }
+
+            if (binary.operation == parser::BinaryOperation::Or) {
+                NullableResultValue left = EvaluateExpression(*binary.left, cursor);
+                NullableResultValue right = EvaluateExpression(*binary.right, cursor);
+
+                if (left.has_value()) {
+                    const auto* left_bool = std::get_if<bool>(&*left);
+                    if (!left_bool) {
+                        throw std::runtime_error("OR expects BOOLEAN operands");
+                    }
+
+                    if (*left_bool) {
+                        return true;
+                    }
+                }
+
+                if (right.has_value()) {
+                    const auto* right_bool = std::get_if<bool>(&*right);
+                    if (!right_bool) {
+                        throw std::runtime_error("OR expects BOOLEAN operands");
+                    }
+
+                    if (*right_bool) {
+                        return true;
+                    }
+                }
+
+                if (!left.has_value() || !right.has_value()) {
+                    return std::nullopt;
+                }
+
+                return false;
+            }
+
+            NullableResultValue left = EvaluateExpression(*binary.left, cursor);
+            NullableResultValue right = EvaluateExpression(*binary.right, cursor);
+
+            if (!left.has_value() || !right.has_value()) {
+                return std::nullopt;
+            }
+
+            int comparison = CompareResultValues(*left, *right);
+
+            switch (binary.operation) {
+                case parser::BinaryOperation::Equal:
+                    return comparison == 0;
+
+                case parser::BinaryOperation::NotEqual:
+                    return comparison != 0;
+
+                case parser::BinaryOperation::Less:
+                    return comparison < 0;
+
+                case parser::BinaryOperation::LessEqual:
+                    return comparison <= 0;
+
+                case parser::BinaryOperation::Greater:
+                    return comparison > 0;
+
+                case parser::BinaryOperation::GreaterEqual:
+                    return comparison >= 0;
+
+                default:
+                    throw std::runtime_error("Unsupported binary operation");
+            }
+        }
+
+        case BoundExpressionKind::IsNull: {
+            const auto& is_null = static_cast<const BoundIsNullExpression&>(expression);
+
+            NullableResultValue value = EvaluateExpression(*is_null.expression, cursor);
+
+            bool result = !value.has_value();
+
+            if (is_null.is_not) {
+                result = !result;
+            }
+
+            return result;
         }
     }
 
-    conjuncts.push_back(&expression);
+    throw std::runtime_error("Unsupported bound expression kind");
+}
+
+SelectResult Executor::ExecuteGlobalAggregateSelect(
+    const BoundSelectStatement& statement,
+    const std::vector<std::string>& column_names,
+    const std::vector<std::size_t>& projection
+) {
+    (void)statement;
+    (void)column_names;
+    (void)projection;
+    throw std::runtime_error("ExecuteGlobalAggregateSelect is not implemented yet");
+}
+
+SelectResult Executor::ExecuteGroupedAggregateSelect(
+    const BoundSelectStatement& statement,
+    const std::vector<std::string>& column_names,
+    const std::vector<std::size_t>& projection
+) {
+    (void)statement;
+    (void)column_names;
+    (void)projection;
+    throw std::runtime_error("ExecuteGroupedAggregateSelect is not implemented yet");
 }
 
 }
