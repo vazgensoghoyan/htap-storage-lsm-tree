@@ -1,6 +1,6 @@
 #include <stdexcept>
-#include <functional>
 #include <limits>
+#include <algorithm>
 
 #include "executor/executor.hpp"
 
@@ -80,6 +80,22 @@ int CompareResultValues(const ResultValue& left, const ResultValue& right) {
     }
 
     throw std::runtime_error("Unsupported value type in comparison");
+}
+
+int CompareNullableResultValues(const NullableResultValue& left, const NullableResultValue& right) {
+    if (!left.has_value() && !right.has_value()) {
+        return 0;
+    }
+
+    if (!left.has_value()) {
+        return 1;
+    }
+
+    if (!right.has_value()) {
+        return -1;
+    }
+
+    return CompareResultValues(*left, *right);
 }
 
 }
@@ -366,6 +382,12 @@ SelectResult Executor::ExecutePlainSelect(
     SelectResult result;
     result.column_names = column_names;
 
+    struct PlainSortRow {
+        std::vector<NullableResultValue> sort_keys;
+        ResultRow row;
+    };
+    std::vector<PlainSortRow> sorted_rows;
+
     std::unique_ptr<storage::ICursor> cursor;
 
     std::vector<const BoundExpression*> conjuncts;
@@ -545,14 +567,65 @@ SelectResult Executor::ExecutePlainSelect(
             row.push_back(EvaluateExpression(*expression_item->expression, *cursor));
 
         }
-        result.rows.push_back(std::move(row));
 
-        if (can_apply_early_limit && statement.limit.has_value() &&
-            result.rows.size() >= *statement.limit) {
-            break;
+        if (statement.order_by_items.empty()) {
+            result.rows.push_back(std::move(row));
+
+            if (can_apply_early_limit && statement.limit.has_value() &&
+                result.rows.size() >= *statement.limit) {
+                break;
+            }
+        } else {
+            std::vector<NullableResultValue> sort_keys;
+            sort_keys.reserve(statement.order_by_items.size());
+
+            for (const auto& item : statement.order_by_items) {
+                sort_keys.push_back(EvaluateExpression(*item.expression, *cursor));
+            }
+
+            sorted_rows.push_back(
+                PlainSortRow {
+                    std::move(sort_keys),
+                    std::move(row)
+                }
+            );
         }
 
         cursor->next();
+    }
+
+    if (!statement.order_by_items.empty()) {
+        std::sort(
+            sorted_rows.begin(),
+            sorted_rows.end(),
+            [&](const PlainSortRow& x, const PlainSortRow& y) {
+                for (std::size_t i = 0; i < statement.order_by_items.size(); ++i) {
+                    int cmp = CompareNullableResultValues(x.sort_keys[i], y.sort_keys[i]);
+
+                    if (cmp == 0) continue;
+
+                    if (statement.order_by_items[i].direction == parser::OrderDirection::Asc) {
+                        return (cmp < 0);
+                    }
+
+                    if (statement.order_by_items[i].direction == parser::OrderDirection::Desc) {
+                        return (cmp > 0);
+                    }
+
+                    throw std::runtime_error("Unsupported order direction");
+                }
+
+                return false;
+            }
+        );
+
+
+        result.rows.reserve(sorted_rows.size());
+
+        for (auto& sorted_row : sorted_rows) {
+            result.rows.push_back(std::move(sorted_row.row));
+        }
+
     }
 
     if (!can_apply_early_limit && statement.limit.has_value()) {
