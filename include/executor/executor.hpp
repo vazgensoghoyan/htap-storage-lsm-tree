@@ -16,6 +16,12 @@ public:
     ExecutionResult Execute(const BoundStatement& statement);
 
 private:
+    struct SelectCursorBuildResult {
+        std::unique_ptr<storage::ICursor> cursor;
+        bool empty_result = false;
+    };
+
+private:
     CreateTableResult ExecuteCreateTable(const BoundCreateTableStatement& statement);
     InsertResult ExecuteInsert(const BoundInsertStatement& statement);
     SelectResult ExecuteSelect(const BoundSelectStatement& statement);
@@ -55,6 +61,11 @@ private:
     NullableResultValue EvaluateExpression(
         const BoundExpression& expression,
         const storage::ICursor& cursor
+    ) const;
+
+    SelectCursorBuildResult BuildCursorForSelect(
+        const BoundSelectStatement& statement,
+        const std::vector<std::size_t>& projection
     ) const;
 
 private:

@@ -9,6 +9,168 @@ namespace htap::executor {
 
 namespace {
 
+struct GlobalAggregateState {
+        std::int64_t count = 0;
+
+        std::int64_t int_sum = 0;
+        std::int64_t int_min = std::numeric_limits<std::int64_t>::max();
+        std::int64_t int_max = std::numeric_limits<std::int64_t>::min();
+
+        double double_sum = 0;
+        double double_min = std::numeric_limits<double>::max();
+        double double_max = std::numeric_limits<double>::lowest();
+};
+
+void UpdateGlobalAggregateState(
+    const NullableResultValue& value, 
+    const BoundSelectAggregateExpression& aggregate, 
+    GlobalAggregateState& aggregate_state
+) {
+    if (!value.has_value()) {
+        return;
+    }
+
+    switch (aggregate.kind) {
+        case parser::AggregateKind::Count:
+            ++aggregate_state.count;
+            return;
+
+        case parser::AggregateKind::Avg:
+            ++aggregate_state.count;
+
+            if (const auto* double_value = std::get_if<double>(&*value)) {
+                aggregate_state.double_sum += *double_value;
+                return;
+            }
+
+            if (const auto* int_value = std::get_if<std::int64_t>(&*value)) {
+                aggregate_state.double_sum += static_cast<double>(*int_value);
+                return;
+            }
+
+            throw std::runtime_error("AVG expects numeric value");
+
+        case parser::AggregateKind::Sum:
+            ++aggregate_state.count;
+
+            if (aggregate.result_type == ExpressionType::Int64) {
+                aggregate_state.int_sum += std::get<std::int64_t>(*value);
+                return;
+            }
+
+            if (aggregate.result_type == ExpressionType::Double) {
+                aggregate_state.double_sum += std::get<double>(*value);
+                return;
+            }
+
+            throw std::runtime_error("Unsupported SUM result type");
+
+        case parser::AggregateKind::Min:
+            ++aggregate_state.count;
+
+            if (aggregate.result_type == ExpressionType::Int64) {
+                std::int64_t current = std::get<std::int64_t>(*value);
+                if (current < aggregate_state.int_min) {
+                    aggregate_state.int_min = current;
+                }
+                return;
+            }
+
+            if (aggregate.result_type == ExpressionType::Double) {
+                double current = std::get<double>(*value);
+                if (current < aggregate_state.double_min) {
+                    aggregate_state.double_min = current;
+                }
+                return;
+            }
+
+            throw std::runtime_error("Unsupported MIN result type");
+
+        case parser::AggregateKind::Max:
+            ++aggregate_state.count;
+
+            if (aggregate.result_type == ExpressionType::Int64) {
+                std::int64_t current = std::get<std::int64_t>(*value);
+                if (current > aggregate_state.int_max) {
+                    aggregate_state.int_max = current;
+                }
+                return;
+            }
+
+            if (aggregate.result_type == ExpressionType::Double) {
+                double current = std::get<double>(*value);
+                if (current > aggregate_state.double_max) {
+                    aggregate_state.double_max = current;
+                }
+                return;
+            }
+
+            throw std::runtime_error("Unsupported MAX result type");
+    }
+
+    throw std::runtime_error("Unsupported aggregate kind");
+}
+
+NullableResultValue FinalizeAggregateState(
+    const BoundSelectAggregateExpression& aggregate, 
+    const GlobalAggregateState& aggregate_state
+) {
+    switch (aggregate.kind) {
+        case parser::AggregateKind::Count: 
+            return aggregate_state.count;
+        
+        case parser::AggregateKind::Avg:
+            if (aggregate_state.count == 0) return std::nullopt;
+
+            if (aggregate.result_type == ExpressionType::Double) {
+                return aggregate_state.double_sum / aggregate_state.count;
+            }
+
+            throw std::runtime_error("Unsupported AVG result type");
+
+        case parser::AggregateKind::Sum:
+            if (aggregate_state.count == 0) return std::nullopt;
+
+            if (aggregate.result_type == ExpressionType::Int64) {
+                return aggregate_state.int_sum;
+            }
+
+            if (aggregate.result_type == ExpressionType::Double) {
+                return aggregate_state.double_sum;
+            }
+
+            throw std::runtime_error("Unsupported SUM result type");
+
+        case parser::AggregateKind::Min:
+            if (aggregate_state.count == 0) return std::nullopt;
+
+            if (aggregate.result_type == ExpressionType::Int64) {
+                return aggregate_state.int_min;
+            }
+
+            if (aggregate.result_type == ExpressionType::Double) {
+                return aggregate_state.double_min;
+            }
+
+            throw std::runtime_error("Unsupported MIN result type");
+
+        case parser::AggregateKind::Max:
+            if (aggregate_state.count == 0) return std::nullopt;
+
+            if (aggregate.result_type == ExpressionType::Int64) {
+                return aggregate_state.int_max;
+            }
+
+            if (aggregate.result_type == ExpressionType::Double) {
+                return aggregate_state.double_max;
+            }
+
+            throw std::runtime_error("Unsupported MAX result type");
+    }
+
+    throw std::runtime_error("Unsupported aggregation kind");
+}
+
 void CollectConjuncts(const BoundExpression& expression, std::vector<const BoundExpression*>& conjuncts) {
     if (expression.kind == BoundExpressionKind::Binary) {
         const auto& binary = static_cast<const BoundBinaryExpression&>(expression);
@@ -388,7 +550,108 @@ SelectResult Executor::ExecutePlainSelect(
     };
     std::vector<PlainSortRow> sorted_rows;
 
-    std::unique_ptr<storage::ICursor> cursor;
+    SelectCursorBuildResult cursor_build_result = BuildCursorForSelect(statement, projection);
+    if (cursor_build_result.empty_result) {
+        return result;
+    }
+
+    std::unique_ptr<storage::ICursor> cursor = std::move(cursor_build_result.cursor);
+
+    while (cursor->valid()) {
+
+        if (statement.where_expression && !EvaluatePredicate(*statement.where_expression, *cursor)) {
+            cursor->next();
+            continue;
+        }
+
+        ResultRow row;
+        row.reserve(statement.select_items.size());
+
+        for (const auto& item : statement.select_items) {
+            const auto* expression_item = dynamic_cast<const BoundSelectItemExpression*>(item.get());
+
+            if (!expression_item) {
+                throw std::runtime_error("Plain SELECT does not support aggregate select items");
+            }
+
+            row.push_back(EvaluateExpression(*expression_item->expression, *cursor));
+
+        }
+
+        if (statement.order_by_items.empty()) {
+            result.rows.push_back(std::move(row));
+
+            if (can_apply_early_limit && statement.limit.has_value() &&
+                result.rows.size() >= *statement.limit) {
+                break;
+            }
+        } else {
+            std::vector<NullableResultValue> sort_keys;
+            sort_keys.reserve(statement.order_by_items.size());
+
+            for (const auto& item : statement.order_by_items) {
+                sort_keys.push_back(EvaluateExpression(*item.expression, *cursor));
+            }
+
+            sorted_rows.push_back(
+                PlainSortRow {
+                    std::move(sort_keys),
+                    std::move(row)
+                }
+            );
+        }
+
+        cursor->next();
+    }
+
+    if (!statement.order_by_items.empty()) {
+        std::sort(
+            sorted_rows.begin(),
+            sorted_rows.end(),
+            [&](const PlainSortRow& x, const PlainSortRow& y) {
+                for (std::size_t i = 0; i < statement.order_by_items.size(); ++i) {
+                    int cmp = CompareNullableResultValues(x.sort_keys[i], y.sort_keys[i]);
+
+                    if (cmp == 0) continue;
+
+                    if (statement.order_by_items[i].direction == parser::OrderDirection::Asc) {
+                        return (cmp < 0);
+                    }
+
+                    if (statement.order_by_items[i].direction == parser::OrderDirection::Desc) {
+                        return (cmp > 0);
+                    }
+
+                    throw std::runtime_error("Unsupported order direction");
+                }
+
+                return false;
+            }
+        );
+
+
+        result.rows.reserve(sorted_rows.size());
+
+        for (auto& sorted_row : sorted_rows) {
+            result.rows.push_back(std::move(sorted_row.row));
+        }
+
+    }
+
+    if (!can_apply_early_limit && statement.limit.has_value()) {
+        if (result.rows.size() > *statement.limit) {
+            result.rows.resize(*statement.limit);
+        }
+    }
+
+    return result;
+}
+
+Executor::SelectCursorBuildResult Executor::BuildCursorForSelect(
+    const BoundSelectStatement& statement,
+    const std::vector<std::size_t>& projection
+) const {
+    SelectCursorBuildResult build_result;
 
     std::vector<const BoundExpression*> conjuncts;
     if (statement.where_expression) {
@@ -515,126 +778,47 @@ SelectResult Executor::ExecutePlainSelect(
                 break;
         }
 
-        if (empty_result) break;
+        if (empty_result) {
+            break;
+        }
     }
 
-    if (empty_result) return result;
-
+    if (empty_result) {
+        build_result.empty_result = true;
+        return build_result;
+    }
 
     if (found_point_lookup) {
-        cursor = storage_engine_.get(
+        build_result.cursor = storage_engine_.get(
             statement.table_name,
             *point_key,
             projection
         );
-    } else if (found_any_range_predicate) {
+        return build_result;
+    }
+
+    if (found_any_range_predicate) {
         if (from.has_value() && to.has_value() && *from >= *to) {
-            return result;
+            build_result.empty_result = true;
+            return build_result;
         }
 
-        cursor = storage_engine_.scan(
+        build_result.cursor = storage_engine_.scan(
             statement.table_name,
             from,
             to,
             projection
         );
-    } else {
-        cursor = storage_engine_.scan(
-            statement.table_name,
-            std::nullopt,
-            std::nullopt,
-            projection
-        );
+        return build_result;
     }
 
-    while (cursor->valid()) {
-
-        if (statement.where_expression && !EvaluatePredicate(*statement.where_expression, *cursor)) {
-            cursor->next();
-            continue;
-        }
-
-        ResultRow row;
-        row.reserve(statement.select_items.size());
-
-        for (const auto& item : statement.select_items) {
-            const auto* expression_item = dynamic_cast<const BoundSelectItemExpression*>(item.get());
-
-            if (!expression_item) {
-                throw std::runtime_error("Plain SELECT does not support aggregate select items");
-            }
-
-            row.push_back(EvaluateExpression(*expression_item->expression, *cursor));
-
-        }
-
-        if (statement.order_by_items.empty()) {
-            result.rows.push_back(std::move(row));
-
-            if (can_apply_early_limit && statement.limit.has_value() &&
-                result.rows.size() >= *statement.limit) {
-                break;
-            }
-        } else {
-            std::vector<NullableResultValue> sort_keys;
-            sort_keys.reserve(statement.order_by_items.size());
-
-            for (const auto& item : statement.order_by_items) {
-                sort_keys.push_back(EvaluateExpression(*item.expression, *cursor));
-            }
-
-            sorted_rows.push_back(
-                PlainSortRow {
-                    std::move(sort_keys),
-                    std::move(row)
-                }
-            );
-        }
-
-        cursor->next();
-    }
-
-    if (!statement.order_by_items.empty()) {
-        std::sort(
-            sorted_rows.begin(),
-            sorted_rows.end(),
-            [&](const PlainSortRow& x, const PlainSortRow& y) {
-                for (std::size_t i = 0; i < statement.order_by_items.size(); ++i) {
-                    int cmp = CompareNullableResultValues(x.sort_keys[i], y.sort_keys[i]);
-
-                    if (cmp == 0) continue;
-
-                    if (statement.order_by_items[i].direction == parser::OrderDirection::Asc) {
-                        return (cmp < 0);
-                    }
-
-                    if (statement.order_by_items[i].direction == parser::OrderDirection::Desc) {
-                        return (cmp > 0);
-                    }
-
-                    throw std::runtime_error("Unsupported order direction");
-                }
-
-                return false;
-            }
-        );
-
-
-        result.rows.reserve(sorted_rows.size());
-
-        for (auto& sorted_row : sorted_rows) {
-            result.rows.push_back(std::move(sorted_row.row));
-        }
-
-    }
-
-    if (!can_apply_early_limit && statement.limit.has_value()) {
-        if (result.rows.size() > *statement.limit) {
-            result.rows.resize(*statement.limit);
-        }
-    }
-
-    return result;
+    build_result.cursor = storage_engine_.scan(
+        statement.table_name,
+        std::nullopt,
+        std::nullopt,
+        projection
+    );
+    return build_result;
 }
 
 bool Executor::EvaluatePredicate(const BoundExpression& expression, const storage::ICursor& cursor) const {
@@ -832,10 +1016,63 @@ SelectResult Executor::ExecuteGlobalAggregateSelect(
     const std::vector<std::string>& column_names,
     const std::vector<std::size_t>& projection
 ) {
-    (void)statement;
-    (void)column_names;
-    (void)projection;
-    throw std::runtime_error("ExecuteGlobalAggregateSelect is not implemented yet");
+    if (!statement.schema) {
+        throw std::runtime_error("BoundSelectStatement schema is null");
+    }
+
+    SelectResult result;
+    result.column_names = column_names;
+
+    std::vector<const BoundSelectAggregateExpression*> aggregates;
+    aggregates.reserve(statement.select_items.size());
+
+    std::vector<GlobalAggregateState> aggregate_states;
+    aggregate_states.reserve(statement.select_items.size());
+
+    for (const auto& item : statement.select_items) {
+        const auto* aggregate = dynamic_cast<const BoundSelectAggregateExpression*>(item.get());
+
+        if (!aggregate) throw std::runtime_error("Global aggregate SELECT expects aggregate select items only");
+
+        aggregates.push_back(aggregate);
+        aggregate_states.push_back(GlobalAggregateState{});
+    }
+
+    SelectCursorBuildResult cursor_build_result = BuildCursorForSelect(statement, projection);
+
+
+    if (!cursor_build_result.empty_result) {
+        std::unique_ptr<storage::ICursor> cursor = std::move(cursor_build_result.cursor);
+
+        while (cursor->valid()) {
+            if (statement.where_expression && !EvaluatePredicate(*statement.where_expression, *cursor)) {
+                cursor->next();
+                continue;
+            }
+
+            for (std::size_t i = 0; i < aggregates.size(); ++i) {
+                NullableResultValue value = EvaluateExpression(*aggregates[i]->expression, *cursor);
+                UpdateGlobalAggregateState(value, *aggregates[i], aggregate_states[i]);
+            }
+
+            cursor->next();
+        }
+    }
+
+    ResultRow row;
+    row.reserve(aggregates.size());
+
+    for (std::size_t i = 0; i < aggregates.size(); ++i) {
+        row.push_back(
+            FinalizeAggregateState(*aggregates[i], aggregate_states[i])
+        );
+    }
+
+    if (!statement.limit.has_value() || *statement.limit > 0) {
+        result.rows.push_back(std::move(row));
+    }
+
+    return result;
 }
 
 SelectResult Executor::ExecuteGroupedAggregateSelect(
