@@ -29,7 +29,7 @@ struct Column {
  */
 class Schema {
 public:
-    Schema(std::vector<Column> columns, size_t key_index);
+    Schema(std::vector<Column> columns);
 
     // Все колонки в порядке объявления
     const std::vector<Column>& columns() const noexcept;
@@ -41,19 +41,11 @@ public:
     // Количество колонок
     size_t size() const noexcept;
 
-    // Найти индекс колонки по имени
-    std::optional<size_t> get_column_index(const std::string& name) const noexcept;
-
-    // Индекс primary key колонки
-    size_t key_column_index() const noexcept;
-
     // Проверка значения на соответствие схеме
     bool is_valid_value(size_t column_index, const NullableValue& value) const;
 
 private:
     std::vector<Column> columns_;
-    std::unordered_map<std::string, size_t> name_to_index_;
-    size_t key_index_;
 };
 
 } // namespace htap::storage

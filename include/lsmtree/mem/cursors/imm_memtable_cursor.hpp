@@ -23,9 +23,10 @@ public:
 
     storage::Key key() const override;
     storage::NullableValue value(size_t column_idx) const override;
-    const storage::Row& row() const override;
 
 private:
+    const storage::Row& row() const;
+
     bool is_projected(size_t column_idx) const;
 
 private:

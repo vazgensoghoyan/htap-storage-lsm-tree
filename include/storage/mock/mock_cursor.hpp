@@ -16,7 +16,9 @@ public:
 
     Key key() const override;
     NullableValue value(size_t column_idx) const override;
-    const Row& row() const override;
+
+private:
+    const Row& row() const;
 
 private:
     using It = std::map<Key, Row>::const_iterator;

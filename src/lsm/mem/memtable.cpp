@@ -17,10 +17,7 @@ size_t MemTable::size() const noexcept {
 
 std::unique_ptr<ICursor> MemTable::get(Key key, const std::vector<size_t>& projection) const {
     auto it = data_.find(key);
-    if (it == data_.end())
-        return nullptr;
-
-    // single-element cursor через scan
+    if (it == data_.end()) return nullptr;
     return scan(key, key + 1, projection);
 }
 

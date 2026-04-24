@@ -31,7 +31,7 @@ void MockStorageEngine::insert(const std::string& table_name, const Row& values)
         if (!table.schema.is_valid_value(i, values[i]))
             throw std::runtime_error("Invalid value for column");
 
-    const auto& cell = values[table.schema.key_column_index()];
+    const auto& cell = values[KEY_COLUMN_INDEX];
 
     if (!cell.has_value())
         throw std::runtime_error("Key cannot be NULL");

@@ -1,102 +1,82 @@
 #include <gtest/gtest.h>
 
+#include "storage/model/schema.hpp"
 #include "storage/model/schema_builder.hpp"
 
 using namespace htap::storage;
 
-// -------------------- helper --------------------
-
 static Schema make_schema() {
     return SchemaBuilder()
         .add_column("id", ValueType::INT64, true, false)
-        .add_column("age", ValueType::INT64, false, true)
         .add_column("name", ValueType::STRING, false, true)
+        .add_column("score", ValueType::DOUBLE, false, true)
         .build();
 }
 
-// -------------------- SCHEMA TESTS --------------------
-
-TEST(SchemaTest, ReturnsCorrectSize) {
-    auto schema = make_schema();
-    EXPECT_EQ(schema.size(), 3u);
+TEST(SchemaTest, SizeIsCorrect) {
+    Schema schema = make_schema();
+    EXPECT_EQ(schema.size(), 3);
 }
 
-TEST(SchemaTest, GetColumnByIndex) {
-    auto schema = make_schema();
+TEST(SchemaTest, GetColumnValid) {
+    Schema schema = make_schema();
 
     const auto& col = schema.get_column(1);
 
-    EXPECT_EQ(col.name, "age");
-    EXPECT_EQ(col.type, ValueType::INT64);
+    EXPECT_EQ(col.name, "name");
+    EXPECT_EQ(col.type, ValueType::STRING);
 }
 
-TEST(SchemaTest, ThrowsOnInvalidColumnIndex) {
-    auto schema = make_schema();
+TEST(SchemaTest, GetColumnOutOfRangeThrows) {
+    Schema schema = make_schema();
 
     EXPECT_THROW(schema.get_column(100), std::out_of_range);
 }
 
-TEST(SchemaTest, FindsColumnIndexByName) {
-    auto schema = make_schema();
+TEST(SchemaTest, ValidIntValue) {
+    Schema schema = make_schema();
 
-    auto idx = schema.get_column_index("name");
+    NullableValue v = int64_t(42);
 
-    ASSERT_TRUE(idx.has_value());
-    EXPECT_EQ(idx.value(), 2u);
+    EXPECT_TRUE(schema.is_valid_value(0, v)); // id
 }
 
-TEST(SchemaTest, ReturnsNulloptForUnknownColumn) {
-    auto schema = make_schema();
+TEST(SchemaTest, ValidStringValue) {
+    Schema schema = make_schema();
 
-    auto idx = schema.get_column_index("unknown");
+    NullableValue v = std::string("hello");
 
-    EXPECT_FALSE(idx.has_value());
+    EXPECT_TRUE(schema.is_valid_value(1, v));
 }
 
-TEST(SchemaTest, ReturnsKeyColumnIndex) {
-    auto schema = make_schema();
+TEST(SchemaTest, ValidDoubleValue) {
+    Schema schema = make_schema();
 
-    EXPECT_EQ(schema.key_column_index(), 0u);
+    NullableValue v = 3.14;
+
+    EXPECT_TRUE(schema.is_valid_value(2, v));
 }
 
-TEST(SchemaTest, ValidatesNotNullConstraint) {
-    auto schema = make_schema();
+TEST(SchemaTest, InvalidTypeMismatch) {
+    Schema schema = make_schema();
 
-    size_t key_idx = schema.key_column_index();
+    NullableValue v = std::string("not int");
 
-    NullableValue null_value = std::nullopt;
-    NullableValue valid_value = int64_t(42);
-
-    EXPECT_FALSE(schema.is_valid_value(key_idx, null_value));
-    EXPECT_TRUE(schema.is_valid_value(key_idx, valid_value));
+    EXPECT_FALSE(schema.is_valid_value(0, v));
 }
 
-TEST(SchemaTest, ValidatesTypeMatching) {
-    auto schema = make_schema();
+TEST(SchemaTest, NullAllowedColumn) {
+    Schema schema = make_schema();
 
-    auto idx = schema.get_column_index("age").value();
+    NullableValue v = std::nullopt;
 
-    NullableValue wrong_type = std::string("oops");
-
-    EXPECT_FALSE(schema.is_valid_value(idx, wrong_type));
+    EXPECT_TRUE(schema.is_valid_value(1, v)); // name nullable
 }
 
-TEST(SchemaTest, AllowsNullForNullableColumn) {
-    auto schema = make_schema();
+TEST(SchemaTest, NullNotAllowedForKey) {
+    Schema schema = make_schema();
 
-    auto idx = schema.get_column_index("name").value();
+    NullableValue v = std::nullopt;
 
-    NullableValue null_value = std::nullopt;
-
-    EXPECT_TRUE(schema.is_valid_value(idx, null_value));
-}
-
-TEST(SchemaTest, AcceptsCorrectValues) {
-    auto schema = make_schema();
-
-    auto idx = schema.get_column_index("age").value();
-
-    NullableValue value = int64_t(30);
-
-    EXPECT_TRUE(schema.is_valid_value(idx, value));
+    EXPECT_FALSE(schema.is_valid_value(0, v)); // id not nullable
 }

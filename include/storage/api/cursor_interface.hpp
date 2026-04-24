@@ -45,11 +45,6 @@ public:
      * - has_value() => значение внутри variant
      */
     virtual NullableValue value(size_t column_idx) const = 0;
-
-    // метод возвращающий весь row текущий
-    // лучше не использовать когда нет нужды или когда
-    // не уверен, что ты находишься в месте построчного хранения
-    virtual const Row& row() const = 0; 
 };
 
 } // namespace htap::storage

@@ -24,4 +24,6 @@ using NullableValue = std::optional<Value>;
 
 using Row = std::vector<NullableValue>;
 
+inline constexpr size_t KEY_COLUMN_INDEX = 0;
+
 } // namespace htap::storage
