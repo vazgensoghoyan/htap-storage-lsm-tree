@@ -38,10 +38,7 @@ public:
     // - содержит уникальные индексы колонок < schema.size()
     // - порядок сохраняется (как в запросе, типо select b, a)
 
-    virtual void insert(
-        const std::string& table_name,
-        Key key,
-        const Row& values) = 0;
+    virtual void insert(const std::string& table_name, const Row& values) = 0;
 
     virtual std::unique_ptr<ICursor> get(
         const std::string& table_name,

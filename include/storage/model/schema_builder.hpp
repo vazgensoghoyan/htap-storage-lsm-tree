@@ -11,15 +11,11 @@ namespace htap::storage {
 /**
  * Builder для создания Schema
  *
- * ВАЖНО:
- * - key НЕ задаётся в schema
- * - key живёт в LSM engine (MemTable / SSTable)
- *
  * Использование:
  *
  * Schema schema = SchemaBuilder()
- *     .add_column("age", ValueType::INT64, true)
- *     .add_column("name", ValueType::STRING, false)
+ *     .add_column("id", ValueType::INT64, true, false)
+ *     .add_column("name", ValueType::STRING, false, true)
  *     .build();
  *
  * После build() Schema становится immutable
@@ -28,15 +24,22 @@ class SchemaBuilder {
 public:
     SchemaBuilder() = default;
 
-    // Добавить колонку payload
+    // Добавить колонку
     // Исключение, если с таким именем уже существует
     SchemaBuilder& add_column(
         std::string name,
         ValueType type,
-        bool nullable);
+        bool is_key = false,
+        bool nullable = true);
 
     // Построить Schema
-    // Ошибка если 0 колонок
+    //
+    // Выполняет валидацию:
+    // - есть хотя бы одна колонка
+    // - ровно один primary key
+    // - key обязательно типа int64 (пока мы решили так действовать) и не nullable
+    //
+    // исключение при нарушении этих условий
     Schema build();
 
 private:

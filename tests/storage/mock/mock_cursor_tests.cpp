@@ -9,8 +9,9 @@ using namespace htap::storage;
 
 static Schema make_schema() {
     return SchemaBuilder()
-        .add_column("name", ValueType::STRING, true)
-        .add_column("age", ValueType::INT64, true)
+        .add_column("id", ValueType::INT64, true, false)
+        .add_column("name", ValueType::STRING, false, true)
+        .add_column("age", ValueType::INT64, false, true)
         .build();
 }
 
@@ -29,14 +30,16 @@ TEST(MockCursor, SingleRowValidIteration) {
     MockStorageEngine engine;
     engine.create_table("t", make_schema());
 
-    engine.insert("t", 1, {"A", 10});
+    engine.insert("t", {1, "A", 10});
 
-    auto cursor = engine.scan("t", 1, 2, {0,1});
+    auto cursor = engine.scan("t", 1, 2, {0,1,2});
 
     ASSERT_TRUE(cursor->valid());
     EXPECT_EQ(cursor->key(), 1);
-    EXPECT_EQ(std::get<std::string>(*cursor->value(0)), "A");
-    EXPECT_EQ(std::get<int64_t>(*cursor->value(1)), 10);
+
+    EXPECT_EQ(std::get<int64_t>(*cursor->value(0)), 1);
+    EXPECT_EQ(std::get<std::string>(*cursor->value(1)), "A");
+    EXPECT_EQ(std::get<int64_t>(*cursor->value(2)), 10);
 
     cursor->next();
     EXPECT_FALSE(cursor->valid());
@@ -46,11 +49,11 @@ TEST(MockCursor, FullIterationSortedOrder) {
     MockStorageEngine engine;
     engine.create_table("t", make_schema());
 
-    engine.insert("t", 3, {"C", 30});
-    engine.insert("t", 1, {"A", 10});
-    engine.insert("t", 2, {"B", 20});
+    engine.insert("t", {3, "C", 30});
+    engine.insert("t", {1, "A", 10});
+    engine.insert("t", {2, "B", 20});
 
-    auto cursor = engine.scan("t", std::nullopt, std::nullopt, {});
+    auto cursor = engine.scan("t", std::nullopt, std::nullopt, {0});
 
     std::vector<Key> got;
 
@@ -66,13 +69,13 @@ TEST(MockCursor, ProjectionEnforced) {
     MockStorageEngine engine;
     engine.create_table("t", make_schema());
 
-    engine.insert("t", 1, {"A", 10});
+    engine.insert("t", {1, "A", 10});
 
-    auto cursor = engine.scan("t", std::nullopt, std::nullopt, {});
+    auto cursor = engine.scan("t", std::nullopt, std::nullopt, {0}); // only id
 
     ASSERT_TRUE(cursor->valid());
 
-    EXPECT_EQ(cursor->key(), 1);
+    EXPECT_EQ(std::get<int64_t>(*cursor->value(0)), 1);
 
     EXPECT_THROW(cursor->value(1), std::runtime_error);
 }

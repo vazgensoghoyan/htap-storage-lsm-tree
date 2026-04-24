@@ -21,7 +21,7 @@ const Schema& MockStorageEngine::get_table_schema(const std::string& table_name)
     return get_table(table_name).schema;
 }
 
-void MockStorageEngine::insert(const std::string& table_name, Key key, const Row& values) {
+void MockStorageEngine::insert(const std::string& table_name, const Row& values) {
     auto& table = get_table(table_name);
 
     if (values.size() != table.schema.size())
@@ -32,6 +32,7 @@ void MockStorageEngine::insert(const std::string& table_name, Key key, const Row
             throw std::runtime_error("Invalid value for column");
     }
 
+    Key key = std::get<int64_t>(*values[table.schema.key_column_index()]);
     table.data[key] = values;
 }
 

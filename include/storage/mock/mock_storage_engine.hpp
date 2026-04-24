@@ -18,10 +18,7 @@ public:
 
     const Schema& get_table_schema(const std::string& table_name) const override;
 
-    void insert(
-        const std::string& table_name,
-        Key key,
-        const Row& values) override;
+    void insert(const std::string& table_name, const Row& values) override;
 
     std::unique_ptr<ICursor> get(
         const std::string& table_name,

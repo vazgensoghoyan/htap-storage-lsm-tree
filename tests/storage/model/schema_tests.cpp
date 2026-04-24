@@ -8,9 +8,9 @@ using namespace htap::storage;
 
 static Schema make_schema() {
     return SchemaBuilder()
-        .add_column("id", ValueType::INT64, false)
-        .add_column("age", ValueType::INT64, true)
-        .add_column("name", ValueType::STRING, true)
+        .add_column("id", ValueType::INT64, true, false)
+        .add_column("age", ValueType::INT64, false, true)
+        .add_column("name", ValueType::STRING, false, true)
         .build();
 }
 
@@ -51,6 +51,24 @@ TEST(SchemaTest, ReturnsNulloptForUnknownColumn) {
     auto idx = schema.get_column_index("unknown");
 
     EXPECT_FALSE(idx.has_value());
+}
+
+TEST(SchemaTest, ReturnsKeyColumnIndex) {
+    auto schema = make_schema();
+
+    EXPECT_EQ(schema.key_column_index(), 0u);
+}
+
+TEST(SchemaTest, ValidatesNotNullConstraint) {
+    auto schema = make_schema();
+
+    size_t key_idx = schema.key_column_index();
+
+    NullableValue null_value = std::nullopt;
+    NullableValue valid_value = int64_t(42);
+
+    EXPECT_FALSE(schema.is_valid_value(key_idx, null_value));
+    EXPECT_TRUE(schema.is_valid_value(key_idx, valid_value));
 }
 
 TEST(SchemaTest, ValidatesTypeMatching) {
