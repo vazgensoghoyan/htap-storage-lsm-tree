@@ -1,12 +1,14 @@
 #include "lsmtree/mem/memtable.hpp"
-#include "lsmtree/mem/memtable_cursor.hpp"
-#include "lsmtree/mem/imm_memtable.hpp"
+#include "lsmtree/mem/cursors/memtable_cursor.hpp"
+#include "utils/logger.hpp"
 
 using namespace htap::lsmtree;
 using namespace htap::storage;
 
 void MemTable::insert(Key key, const Row& row) {
     data_[key] = row;
+
+    LOG_DEBUG("MemTable insert key={}", key);
 }
 
 size_t MemTable::size() const noexcept {
@@ -40,6 +42,8 @@ std::unique_ptr<ImmutableMemTable> MemTable::freeze() {
     }
 
     data_.clear();
+
+    LOG_INFO("MemTable freeze: size={}, creating ImmutableMemTable", out.size());
 
     return std::make_unique<ImmutableMemTable>(std::move(out));
 }

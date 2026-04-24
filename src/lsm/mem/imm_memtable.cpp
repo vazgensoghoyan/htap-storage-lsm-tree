@@ -1,5 +1,6 @@
 #include "lsmtree/mem/imm_memtable.hpp"
-#include "lsmtree/mem/imm_memtable_cursor.hpp"
+#include "lsmtree/mem/cursors/imm_memtable_cursor.hpp"
+#include "utils/logger.hpp"
 
 using namespace htap::lsmtree;
 using namespace htap::storage;

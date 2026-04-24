@@ -1,5 +1,6 @@
-#pragma once // lsmtree/mem/imm_memtable_cursor.hpp
+#pragma once // lsmtree/mem/cursors/memtable_cursor.hpp
 
+#include <map>
 #include <vector>
 #include <optional>
 #include <cstddef>
@@ -9,12 +10,15 @@
 
 namespace htap::lsmtree {
 
-class ImmutableMemTableCursor final : public storage::ICursor {
+class MemTableCursor final : public storage::ICursor {
 public:
-    ImmutableMemTableCursor(
-        const std::vector<storage::Row>* data,
-        size_t start,
-        size_t end,
+    using Map = std::map<storage::Key, storage::Row>;
+
+public:
+    MemTableCursor(
+        const Map* data,
+        storage::OptKey from,
+        storage::OptKey to,
         std::vector<size_t> projection
     );
 
@@ -29,14 +33,15 @@ private:
     bool is_projected(size_t column_idx) const;
 
 private:
-    const std::vector<storage::Row>* data_;
+    const Map* data_;
 
-    size_t idx_;
-    size_t end_;
+    Map::const_iterator it_;
+    Map::const_iterator end_;
+
+    storage::OptKey to_;
 
     std::vector<size_t> projection_;
-
-    const storage::Row* current_ = nullptr;
+    const storage::Row* current_row_ = nullptr;
 };
 
 } // namespace htap::lsmtree

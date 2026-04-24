@@ -1,4 +1,4 @@
-#include "lsmtree/mem/memtable_cursor.hpp"
+#include "lsmtree/mem/cursors/memtable_cursor.hpp"
 
 #include <stdexcept>
 

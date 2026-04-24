@@ -1,4 +1,4 @@
-#include "lsmtree/mem/memory_cursor.hpp"
+#include "lsmtree/mem/cursors/memory_cursor.hpp"
 
 #include <stdexcept>
 

@@ -1,5 +1,6 @@
 #include "lsmtree/mem/memory_layer.hpp"
-#include "lsmtree/mem/memory_cursor.hpp"
+#include "lsmtree/mem/cursors/memory_cursor.hpp"
+#include "utils/logger.hpp"
 
 using namespace htap::lsmtree;
 using namespace htap::storage;
@@ -20,6 +21,9 @@ void MemoryLayer::insert(Key key, const Row& row) {
 void MemoryLayer::force_freeze() {
     auto imm = active_->freeze(); 
     immutables_.push_back(std::move(imm));
+
+    size_t size = immutables_.back()->size();
+    LOG_INFO("MemTable frozen -> ImmutableMemTable created with {} rows", size);
 
     active_ = std::make_shared<MemTable>();
 }

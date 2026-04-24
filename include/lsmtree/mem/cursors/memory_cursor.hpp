@@ -1,4 +1,4 @@
-#pragma once // lsmtree/mem/memory_cursor.hpp
+#pragma once // lsmtree/mem/cursors/memory_cursor.hpp
 
 #include <vector>
 #include <memory>
