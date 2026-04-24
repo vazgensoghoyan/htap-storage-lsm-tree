@@ -4,29 +4,27 @@
 #include <optional>
 
 #include "storage/api/types.hpp"
-#include "lsmtree/mem/memtable.hpp"
+#include "lsmtree/interfaces/readable_table_interface.hpp"
 
 namespace htap::lsmtree {
 
-class ImmutableMemTable {
+class ImmutableMemTable : public IReadableTable {
 public:
-    using Map = std::map<storage::Key, storage::Row>;
-    using Iterator = Map::const_iterator;
+    explicit ImmutableMemTable(std::vector<storage::Row>&& data);
 
-public:
-    explicit ImmutableMemTable(Map&& mem);
+    std::unique_ptr<storage::ICursor> get(
+        storage::Key key,
+        const std::vector<size_t>& projection) const override;
 
-    std::optional<storage::Row> get(storage::Key key) const;
-
-    Iterator lower_bound(storage::Key key) const;
-
-    Iterator begin() const noexcept;
-    Iterator end() const noexcept;
+    std::unique_ptr<storage::ICursor> scan(
+        storage::OptKey from,
+        storage::OptKey to,
+        const std::vector<size_t>& projection) const override;
 
     size_t size() const noexcept;
 
 private:
-    Map data_;
+    std::vector<storage::Row> data_;
 };
 
 } // namespace htap::lsmtree

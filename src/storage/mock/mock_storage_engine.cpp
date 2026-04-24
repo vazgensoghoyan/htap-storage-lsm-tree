@@ -57,8 +57,8 @@ std::unique_ptr<ICursor> MockStorageEngine::get(
 
 std::unique_ptr<ICursor> MockStorageEngine::scan(
     const std::string& table_name,
-    std::optional<Key> from,
-    std::optional<Key> to,
+    OptKey from,
+    OptKey to,
     const std::vector<size_t>& projection
 ) const {
     const auto& table = get_table(table_name);

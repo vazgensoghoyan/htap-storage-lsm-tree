@@ -21,6 +21,7 @@ public:
 
     Key key() const override;
     NullableValue value(size_t column_idx) const override;
+    const Row& row() const override;
 
 private:
     bool is_projected(size_t column_idx) const;

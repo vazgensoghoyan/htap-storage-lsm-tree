@@ -32,6 +32,8 @@ public:
         bool is_key = false,
         bool nullable = true);
 
+    // Возможно TODO: key только 1 колонка
+
     // Построить Schema
     //
     // Выполняет валидацию:

@@ -33,6 +33,10 @@ NullableValue MockCursor::value(size_t column_idx) const {
     return row[column_idx];
 }
 
+const Row& MockCursor::row() const {
+    return data_->at(keys_[pos_]);
+}
+
 bool MockCursor::is_projected(size_t column_idx) const {
     return std::find(proj_.begin(), proj_.end(), column_idx) != proj_.end();
 }
