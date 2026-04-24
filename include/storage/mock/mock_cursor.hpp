@@ -1,6 +1,5 @@
 #pragma once // storage/mock/mock_cursor.hpp
 
-#include <vector>
 #include <map>
 #include <cstddef>
 
@@ -10,11 +9,7 @@ namespace htap::storage {
 
 class MockCursor final : public ICursor {
 public:
-    MockCursor(
-        std::vector<Key> keys,
-        const std::map<Key, Row>* data,
-        const std::vector<size_t>& projection
-    );
+    MockCursor(const std::map<Key, Row>* data, OptKey from, OptKey to);
 
     bool valid() const override;
     void next() override;
@@ -24,13 +19,15 @@ public:
     const Row& row() const override;
 
 private:
-    bool is_projected(size_t column_idx) const;
+    using It = std::map<Key, Row>::const_iterator;
 
 private:
-    std::vector<Key> keys_;
     const std::map<Key, Row>* data_;
-    std::vector<size_t> proj_;
-    size_t pos_;
+
+    It it_;
+    It end_;
+
+    OptKey to_;
 };
 
 } // namespace htap::storage

@@ -27,60 +27,31 @@ void MockStorageEngine::insert(const std::string& table_name, const Row& values)
     if (values.size() != table.schema.size())
         throw std::runtime_error("Row size mismatch schema");
 
-    for (size_t i = 0; i < values.size(); ++i) {
+    for (size_t i = 0; i < values.size(); ++i)
         if (!table.schema.is_valid_value(i, values[i]))
             throw std::runtime_error("Invalid value for column");
-    }
 
-    Key key = std::get<int64_t>(*values[table.schema.key_column_index()]);
+    const auto& cell = values[table.schema.key_column_index()];
+
+    if (!cell.has_value())
+        throw std::runtime_error("Key cannot be NULL");
+
+    if (!std::holds_alternative<int64_t>(*cell))
+        throw std::runtime_error("Key must be int64");
+
+    Key key = std::get<int64_t>(*cell);
+
     table.data[key] = values;
 }
 
-std::unique_ptr<ICursor> MockStorageEngine::get(
-    const std::string& table_name,
-    Key key,
-    const std::vector<size_t>& projection
-) const {
+std::unique_ptr<ICursor> MockStorageEngine::get(const std::string& table_name, Key key, const std::vector<size_t>&) const {
     const auto& table = get_table(table_name);
-
-    std::vector<Key> keys;
-    if (table.data.find(key) != table.data.end()) {
-        keys.push_back(key);
-    }
-
-    return std::make_unique<MockCursor>(
-        std::move(keys),
-        &table.data,
-        projection
-    );
+    return std::make_unique<MockCursor>(&table.data, key, key + 1);
 }
 
-std::unique_ptr<ICursor> MockStorageEngine::scan(
-    const std::string& table_name,
-    OptKey from,
-    OptKey to,
-    const std::vector<size_t>& projection
-) const {
+std::unique_ptr<ICursor> MockStorageEngine::scan(const std::string& table_name, OptKey from, OptKey to, const std::vector<size_t>&) const {
     const auto& table = get_table(table_name);
-
-    std::vector<Key> keys;
-
-    auto it = from ? table.data.lower_bound(*from)
-                   : table.data.begin();
-
-    auto end_it = table.data.end();
-
-    for (; it != end_it; ++it) {
-        if (to && it->first >= *to)
-            break;
-        keys.push_back(it->first);
-    }
-
-    return std::make_unique<MockCursor>(
-        std::move(keys),
-        &table.data,
-        projection
-    );
+    return std::make_unique<MockCursor>(&table.data, from, to);
 }
 
 MockStorageEngine::MockTable& MockStorageEngine::get_table(const std::string& name) {

@@ -1,42 +1,55 @@
 #include "storage/mock/mock_cursor.hpp"
 
-#include <algorithm>
 #include <stdexcept>
 
 using namespace htap::storage;
 
-MockCursor::MockCursor(
-    std::vector<Key> keys,
-    const std::map<Key, Row>* data,
-    const std::vector<size_t>& pr
-) : keys_(std::move(keys)), data_(data), proj_(pr), pos_(0) { }
+MockCursor::MockCursor(const std::map<Key, Row>* data, OptKey from, OptKey to) : data_(data), to_(to) {
+    if (!data_)
+        throw std::runtime_error("Null data pointer");
+
+    if (from.has_value())
+        it_ = data_->lower_bound(*from);
+    else
+        it_ = data_->begin();
+
+    end_ = data_->end();
+}
 
 bool MockCursor::valid() const {
-    return pos_ < keys_.size();
+    if (it_ == end_)
+        return false;
+
+    if (to_.has_value() && it_->first >= *to_)
+        return false;
+
+    return true;
 }
 
 void MockCursor::next() {
-    if (pos_ < keys_.size())
-        ++pos_;
+    if (!valid()) return;
+    ++it_;
 }
 
 Key MockCursor::key() const {
-    return keys_[pos_];
-}
+    if (!valid())
+        throw std::runtime_error("Cursor invalid");
 
-NullableValue MockCursor::value(size_t column_idx) const {
-    const auto& row = data_->at(keys_[pos_]);
-
-    if (!is_projected(column_idx))
-        throw std::runtime_error("Column not in projection");
-
-    return row[column_idx];
+    return it_->first;
 }
 
 const Row& MockCursor::row() const {
-    return data_->at(keys_[pos_]);
+    if (!valid())
+        throw std::runtime_error("Cursor invalid");
+
+    return it_->second;
 }
 
-bool MockCursor::is_projected(size_t column_idx) const {
-    return std::find(proj_.begin(), proj_.end(), column_idx) != proj_.end();
+NullableValue MockCursor::value(size_t column_idx) const {
+    const auto& r = row();
+
+    if (column_idx >= r.size())
+        throw std::out_of_range("Column index out of range");
+
+    return r[column_idx];
 }
