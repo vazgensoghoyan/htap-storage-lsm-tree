@@ -1,7 +1,7 @@
 #include "lsmtree/mem/memory_cursor.hpp"
 
-#include <algorithm>
 #include <stdexcept>
+#include <limits>
 
 using namespace htap::lsmtree;
 using namespace htap::storage;
@@ -13,14 +13,13 @@ MemoryCursor::MemoryCursor(
     std::optional<Key> to,
     std::vector<size_t> projection
 )
-: projection_(std::move(projection)),
-  to_(to),
-  active_(std::move(active)),
-  immutables_(std::move(immutables)) {
+    : projection_(std::move(projection)),
+      to_(to),
+      active_(std::move(active)),
+      immutables_(std::move(immutables)) {
 
     init_sources(active_, immutables_, from);
-    build_heap();
-    advance();
+    advance(); // выставляем первый элемент
 }
 
 bool MemoryCursor::valid() const {
@@ -33,9 +32,9 @@ void MemoryCursor::next() {
 }
 
 Key MemoryCursor::key() const {
-    if (!valid_) {
+    if (!valid_)
         throw std::runtime_error("Cursor not valid");
-    }
+
     return current_key_;
 }
 
@@ -50,15 +49,21 @@ NullableValue MemoryCursor::value(size_t column_idx) const {
 }
 
 bool MemoryCursor::is_projected(size_t column_idx) const {
-    if (projection_.empty()) return true; // пустой = все колонки
+    if (projection_.empty()) return true;
 
-    return std::find(
-        projection_.begin(),
-        projection_.end(),
-        column_idx
-    ) != projection_.end();
+    for (auto c : projection_)
+        if (c == column_idx)
+            return true;
+
+    return false;
 }
 
+/**
+ * Инициализируем итераторы по слоям
+ * порядок:
+ * 0 = active (newest)
+ * 1..N = immutables (older → older)
+ */
 void MemoryCursor::init_sources(
     const std::shared_ptr<const MemTable>& active,
     const std::vector<std::shared_ptr<const ImmutableMemTable>>& immutables,
@@ -68,7 +73,7 @@ void MemoryCursor::init_sources(
 
     size_t priority = 0;
 
-    // active (самый новый)
+    // ACTIVE (самый новый)
     if (active) {
         auto it = from ? active->lower_bound(*from) : active->begin();
 
@@ -79,89 +84,73 @@ void MemoryCursor::init_sources(
         });
     }
 
-    // immutables (новые → старые)
-    for (auto it_imm = immutables.rbegin(); it_imm != immutables.rend(); ++it_imm) {
-        auto& imm = *it_imm;
+    // IMMUTABLES (новые → старые)
+    for (auto it = immutables.rbegin(); it != immutables.rend(); ++it) {
+        auto& imm = *it;
 
-        auto it = from ? imm->lower_bound(*from) : imm->begin();
+        auto iter = from ? imm->lower_bound(*from) : imm->begin();
 
         sources_.push_back(Source{
-            .it = it,
+            .it = iter,
             .end = imm->end(),
             .priority = priority++
         });
     }
 }
 
-void MemoryCursor::build_heap() {
-    while (!heap_.empty()) heap_.pop();
-
-    for (size_t i = 0; i < sources_.size(); ++i) {
-        const auto& src = sources_[i];
-        if (src.it != src.end) {
-            heap_.push(HeapItem{
-                .key = src.it->first,
-                .source_idx = i
-            });
-        }
-    }
-}
-
+/**
+ * Основная логика:
+ * - выбираем минимальный key среди всех источников
+ * - активный слой имеет приоритет (latest-wins)
+ * - дедуп делаем через пропуск одинаковых key
+ */
 void MemoryCursor::advance() {
-    current_row_ = nullptr;
     valid_ = false;
+    current_row_ = nullptr;
 
-    while (!heap_.empty()) {
-        auto item = heap_.top();
-        heap_.pop();
+    while (true) {
+        Key best_key = std::numeric_limits<Key>::max();
+        size_t best_idx = sources_.size();
+        bool found = false;
 
-        auto& src = sources_[item.source_idx];
+        // 1. найти минимальный key среди всех источников
+        for (size_t i = 0; i < sources_.size(); ++i) {
+            auto& src = sources_[i];
 
-        Key k = item.key;
+            if (src.it == src.end)
+                continue;
 
-        // range check
-        if (to_ && k >= *to_) {
-            heap_ = {}; // очистить
-            return;
+            Key k = src.it->first;
+
+            if (to_ && k >= *to_)
+                continue;
+
+            if (!found || k < best_key) {
+                best_key = k;
+                best_idx = i;
+                found = true;
+            }
         }
 
-        // это самая новая версия (из-за порядка sources)
-        current_key_ = k;
+        if (!found)
+            return; // конец
+
+        auto& src = sources_[best_idx];
+
+        current_key_ = best_key;
         current_row_ = &src.it->second;
         valid_ = true;
 
-        // двигаем этот источник
+        // двигаем выбранный источник
         ++src.it;
-        if (src.it != src.end) {
-            heap_.push(HeapItem{
-                .key = src.it->first,
-                .source_idx = item.source_idx
-            });
-        }
 
-        // удалить дубликаты
-        skip_duplicates(k);
+        // skip duplicates (все остальные источники с тем же key)
+        for (auto& s : sources_) {
+            while (s.it != s.end && s.it->first == best_key) {
+                ++s.it;
+            }
+        }
 
         return;
-    }
-}
-
-void MemoryCursor::skip_duplicates(Key k) {
-    while (!heap_.empty()) {
-        auto item = heap_.top();
-
-        if (item.key != k) break;
-
-        heap_.pop();
-
-        auto& src = sources_[item.source_idx];
-
-        ++src.it;
-        if (src.it != src.end) {
-            heap_.push(HeapItem{
-                .key = src.it->first,
-                .source_idx = item.source_idx
-            });
-        }
     }
 }
