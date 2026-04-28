@@ -5,11 +5,7 @@
 using namespace htap::lsmtree;
 using namespace htap::storage;
 
-MemoryLayer::MemoryLayer()
-    : threshold_(DEFAULT_MEMTABLE_THRESHOLD),
-      active_(std::make_shared<MemTable>()),
-      immutables_()
-{}
+MemoryLayer::MemoryLayer(size_t threshold) : threshold_(threshold), active_(std::make_shared<MemTable>()) {}
 
 void MemoryLayer::insert(Key key, const Row& row) {
     active_->insert(key, row);

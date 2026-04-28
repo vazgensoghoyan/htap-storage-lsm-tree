@@ -68,9 +68,9 @@ Key MemTableCursor::key() const {
     if (!valid())
         throw std::runtime_error("MemTableCursor: invalid state");
 
-    // инвариант: key всегда в Row[0]
+    // инвариант: key всегда в Row[KEY_COLUMN_INDEX]
     const auto& row = *current_row_;
-    return std::get<Key>(row[0].value());
+    return std::get<Key>(row[KEY_COLUMN_INDEX].value());
 }
 
 NullableValue MemTableCursor::value(size_t column_idx) const {

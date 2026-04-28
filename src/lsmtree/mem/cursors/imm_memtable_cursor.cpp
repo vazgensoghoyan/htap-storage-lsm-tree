@@ -11,10 +11,10 @@ ImmutableMemTableCursor::ImmutableMemTableCursor(
     size_t end,
     std::vector<size_t> projection
 )
-    : data_(data),
-      idx_(start),
-      end_(end),
-      projection_(std::move(projection))
+    : data_(data)
+    , idx_(start)
+    , end_(end)
+    , projection_(std::move(projection))
 {
     if (!data_ || idx_ >= end_) {
         current_ = nullptr;
@@ -46,7 +46,7 @@ Key ImmutableMemTableCursor::key() const {
         throw std::runtime_error("Cursor not valid");
 
     // инвариант: key всегда в column 0
-    return std::get<Key>((*current_)[0].value());
+    return std::get<Key>((*current_)[KEY_COLUMN_INDEX].value());
 }
 
 NullableValue ImmutableMemTableCursor::value(size_t column_idx) const {

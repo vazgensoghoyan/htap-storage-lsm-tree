@@ -13,9 +13,9 @@ TEST(SchemaBuilderTest, BuildsValidSchema) {
     EXPECT_EQ(schema.size(), 2);
 
     const auto& cols = schema.columns();
-    EXPECT_TRUE(cols[0].is_key);
-    EXPECT_EQ(cols[0].name, "id");
-    EXPECT_EQ(cols[0].type, ValueType::INT64);
+    EXPECT_TRUE(cols[KEY_COLUMN_INDEX].is_key);
+    EXPECT_EQ(cols[KEY_COLUMN_INDEX].name, "id");
+    EXPECT_EQ(cols[KEY_COLUMN_INDEX].type, ValueType::INT64);
 
     EXPECT_EQ(cols[1].name, "name");
 }

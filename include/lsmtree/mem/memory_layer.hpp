@@ -17,7 +17,7 @@ inline constexpr size_t DEFAULT_MEMTABLE_THRESHOLD = 10000;
 
 class MemoryLayer : public IReadableTable {
 public:
-    MemoryLayer();
+    MemoryLayer(size_t threshold = DEFAULT_MEMTABLE_THRESHOLD);
 
     void insert(storage::Key key, const storage::Row& row);
 

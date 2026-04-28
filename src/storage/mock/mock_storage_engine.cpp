@@ -1,5 +1,6 @@
 #include "storage/mock/mock_storage_engine.hpp"
 #include "storage/mock/mock_cursor.hpp"
+#include "utils/logger.hpp"
 
 #include <stdexcept>
 #include <memory>
@@ -11,6 +12,8 @@ void MockStorageEngine::create_table(const std::string& table_name, const Schema
         throw std::runtime_error("Table already exists");
 
     tables_.emplace(table_name, MockTable{schema, {}});
+
+    LOG_INFO("create_table: name='{}', columns={}", table_name, schema.size());
 }
 
 bool MockStorageEngine::table_exists(const std::string& table_name) const {
@@ -41,16 +44,29 @@ void MockStorageEngine::insert(const std::string& table_name, const Row& values)
 
     Key key = std::get<int64_t>(*cell);
 
+    #ifdef LOGGING_ENABLED
+    if (table.data.contains(key))
+        LOG_WARN("insert overwrite: table='{}', key={}", table_name, key);
+    #endif
+
     table.data[key] = values;
+
+    LOG_DEBUG("insert: table='{}', key={}, size after={}", table_name, key, table.data.size());
 }
 
 std::unique_ptr<ICursor> MockStorageEngine::get(const std::string& table_name, Key key, const std::vector<size_t>&) const {
     const auto& table = get_table(table_name);
+    LOG_DEBUG("get: table='{}', key={}", table_name, key);
     return std::make_unique<MockCursor>(&table.data, key, key + 1);
 }
 
 std::unique_ptr<ICursor> MockStorageEngine::scan(const std::string& table_name, OptKey from, OptKey to, const std::vector<size_t>&) const {
     const auto& table = get_table(table_name);
+    LOG_DEBUG("scan: table='{}', from={}, to={}",
+        table_name,
+        from.has_value() ? std::to_string(*from) : "-inf",
+        to.has_value() ? std::to_string(*to) : "+inf"
+    );
     return std::make_unique<MockCursor>(&table.data, from, to);
 }
 
