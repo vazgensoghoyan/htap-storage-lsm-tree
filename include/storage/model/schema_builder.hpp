@@ -22,7 +22,7 @@ namespace htap::storage {
  */
 class SchemaBuilder {
 public:
-    SchemaBuilder() = default;
+    SchemaBuilder();
 
     // Добавить колонку
     // Исключение, если с таким именем уже существует
@@ -32,12 +32,15 @@ public:
         bool is_key = false,
         bool nullable = true);
 
+    // Возможно TODO: key только 1 колонка
+
     // Построить Schema
     //
     // Выполняет валидацию:
     // - есть хотя бы одна колонка
     // - ровно один primary key
     // - key обязательно типа int64 (пока мы решили так действовать) и не nullable
+    // - key обазятельно на первом месте
     //
     // исключение при нарушении этих условий
     Schema build();
@@ -45,6 +48,7 @@ public:
 private:
     std::vector<Column> columns_;
     std::unordered_set<std::string> column_names_;
+    bool key_seen_;
 };
 
 } // namespace htap::storage

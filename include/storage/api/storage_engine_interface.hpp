@@ -50,8 +50,8 @@ public:
     // И любую из границ можем не указывать, это эквивалентно +-inf
     virtual std::unique_ptr<ICursor> scan(
         const std::string& table_name,
-        std::optional<Key> from,
-        std::optional<Key> to,
+        OptKey from,
+        OptKey to,
         const std::vector<size_t>& projection) const = 0;
 };
 

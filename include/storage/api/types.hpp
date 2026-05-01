@@ -16,11 +16,14 @@ enum class ValueType {
 };
 
 using Key = int64_t;
+using OptKey = std::optional<Key>;
 
 using Value = std::variant<int64_t, double, std::string>; // either haskell
 
 using NullableValue = std::optional<Value>;
 
 using Row = std::vector<NullableValue>;
+
+inline constexpr size_t KEY_COLUMN_INDEX = 0;
 
 } // namespace htap::storage
