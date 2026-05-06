@@ -30,7 +30,8 @@ public:
         const std::string& table_name,
         std::optional<Key> from,
         std::optional<Key> to,
-        const std::vector<size_t>& projection
+        const std::vector<size_t>& projection,
+        ScanOrder order = ScanOrder::Unordered
     ) const override;
 
 private:

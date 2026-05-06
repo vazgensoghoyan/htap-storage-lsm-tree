@@ -46,13 +46,13 @@ public:
         const std::vector<size_t>& projection) const = 0;
 
     // [from, to)
-    // решил, что так лучше, как например для складывания диапозонов
-    // И любую из границ можем не указывать, это эквивалентно +-inf
+    // Любую из границ можем не указывать, это эквивалентно +-inf
     virtual std::unique_ptr<ICursor> scan(
         const std::string& table_name,
         std::optional<Key> from,
         std::optional<Key> to,
-        const std::vector<size_t>& projection) const = 0;
+        const std::vector<size_t>& projection,
+        ScanOrder order = ScanOrder::Unordered) const = 0;
 };
 
 } // namespace htap::storage

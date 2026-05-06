@@ -59,8 +59,11 @@ std::unique_ptr<ICursor> MockStorageEngine::scan(
     const std::string& table_name,
     std::optional<Key> from,
     std::optional<Key> to,
-    const std::vector<size_t>& projection
+    const std::vector<size_t>& projection,
+    ScanOrder order
 ) const {
+    (void)order;
+
     const auto& table = get_table(table_name);
 
     std::vector<Key> keys;
