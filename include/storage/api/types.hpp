@@ -17,7 +17,7 @@ enum class ValueType {
 
 enum class ScanOrder {
     Unordered,
-    KeyAsceding
+    KeyAscending
 };
 
 using Key = int64_t;
