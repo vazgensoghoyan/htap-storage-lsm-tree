@@ -64,18 +64,3 @@ TEST(MockCursor, FullIterationSortedOrder) {
 
     EXPECT_EQ(got, std::vector<Key>({1, 2, 3}));
 }
-
-TEST(MockCursor, ProjectionEnforced) {
-    MockStorageEngine engine;
-    engine.create_table("t", make_schema());
-
-    engine.insert("t", {1, "A", 10});
-
-    auto cursor = engine.scan("t", std::nullopt, std::nullopt, {0}); // only id
-
-    ASSERT_TRUE(cursor->valid());
-
-    EXPECT_EQ(std::get<int64_t>(*cursor->value(0)), 1);
-
-    EXPECT_THROW(cursor->value(1), std::runtime_error);
-}

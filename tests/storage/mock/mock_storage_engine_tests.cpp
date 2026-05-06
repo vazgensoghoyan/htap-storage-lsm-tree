@@ -156,7 +156,7 @@ TEST(MockEngine, SchemaValidationRejectsBadType) {
     engine.create_table("users", make_schema());
 
     Row bad(3);
-    bad[0] = std::string("not_int"); // key must be int64
+    bad[KEY_COLUMN_INDEX] = std::string("not_int"); // key must be int64
 
     EXPECT_THROW(engine.insert("users", bad), std::runtime_error);
 }

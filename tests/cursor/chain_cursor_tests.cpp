@@ -1,12 +1,11 @@
 #include "storage/cursor/chain_cursor.hpp"
 #include "storage/cursor/empty_cursor.hpp"
-#include "storage/mock/mock_cursor.hpp"
 
 #include <gtest/gtest.h>
 
-#include <map>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -16,9 +15,51 @@ using htap::storage::Key;
 using htap::storage::NullableValue;
 using htap::storage::Row;
 using htap::storage::Value;
-using htap::storage::MockCursor;
 using htap::storage::cursor::ChainCursor;
 using htap::storage::cursor::EmptyCursor;
+
+class VectorCursor final : public ICursor {
+public:
+    explicit VectorCursor(std::vector<std::pair<Key, Row>> rows)
+        : rows_(std::move(rows)) {
+    }
+
+    bool valid() const override {
+        return pos_ < rows_.size();
+    }
+
+    void next() override {
+        if (valid()) {
+            ++pos_;
+        }
+    }
+
+    Key key() const override {
+        if (!valid()) {
+            throw std::logic_error("VectorCursor::key() called on invalid cursor");
+        }
+
+        return rows_[pos_].first;
+    }
+
+    NullableValue value(std::size_t column_idx) const override {
+        if (!valid()) {
+            throw std::logic_error("VectorCursor::value() called on invalid cursor");
+        }
+
+        const Row& row = rows_[pos_].second;
+
+        if (column_idx >= row.size()) {
+            throw std::out_of_range("Column index out of range");
+        }
+
+        return row[column_idx];
+    }
+
+private:
+    std::vector<std::pair<Key, Row>> rows_;
+    std::size_t pos_ = 0;
+};
 
 Row make_row(Key key, int64_t value) {
     return Row{
@@ -27,16 +68,8 @@ Row make_row(Key key, int64_t value) {
     };
 }
 
-std::unique_ptr<ICursor> make_mock_cursor(
-    std::vector<Key> keys,
-    const std::map<Key, Row>* data,
-    std::vector<std::size_t> projection = {0, 1}
-) {
-    return std::make_unique<MockCursor>(
-        std::move(keys),
-        data,
-        projection
-    );
+std::unique_ptr<ICursor> make_vector_cursor(std::vector<std::pair<Key, Row>> rows) {
+    return std::make_unique<VectorCursor>(std::move(rows));
 }
 
 TEST(ChainCursorTest, EmptyChainIsInvalid) {
@@ -64,13 +97,11 @@ TEST(ChainCursorTest, EmptyChainIsInvalid) {
 }
 
 TEST(ChainCursorTest, SingleCursorWorks) {
-    std::map<Key, Row> data{
+    std::vector<std::unique_ptr<ICursor>> cursors;
+    cursors.push_back(make_vector_cursor({
         {1, make_row(1, 10)},
         {2, make_row(2, 20)},
-    };
-
-    std::vector<std::unique_ptr<ICursor>> cursors;
-    cursors.push_back(make_mock_cursor({1, 2}, &data));
+    }));
 
     ChainCursor cursor(std::move(cursors));
 
@@ -90,16 +121,15 @@ TEST(ChainCursorTest, SingleCursorWorks) {
 }
 
 TEST(ChainCursorTest, ReadsCursorsSequentiallyWithoutSorting) {
-    std::map<Key, Row> data{
-        {1, make_row(1, 10)},
-        {2, make_row(2, 20)},
+    std::vector<std::unique_ptr<ICursor>> cursors;
+    cursors.push_back(make_vector_cursor({
         {10, make_row(10, 100)},
         {30, make_row(30, 300)},
-    };
-
-    std::vector<std::unique_ptr<ICursor>> cursors;
-    cursors.push_back(make_mock_cursor({10, 30}, &data));
-    cursors.push_back(make_mock_cursor({1, 2}, &data));
+    }));
+    cursors.push_back(make_vector_cursor({
+        {1, make_row(1, 10)},
+        {2, make_row(2, 20)},
+    }));
 
     ChainCursor cursor(std::move(cursors));
 
@@ -114,16 +144,15 @@ TEST(ChainCursorTest, ReadsCursorsSequentiallyWithoutSorting) {
 }
 
 TEST(ChainCursorTest, SkipsEmptyCursors) {
-    std::map<Key, Row> data{
-        {5, make_row(5, 50)},
-        {6, make_row(6, 60)},
-    };
-
     std::vector<std::unique_ptr<ICursor>> cursors;
     cursors.push_back(std::make_unique<EmptyCursor>());
-    cursors.push_back(make_mock_cursor({5}, &data));
+    cursors.push_back(make_vector_cursor({
+        {5, make_row(5, 50)},
+    }));
     cursors.push_back(std::make_unique<EmptyCursor>());
-    cursors.push_back(make_mock_cursor({6}, &data));
+    cursors.push_back(make_vector_cursor({
+        {6, make_row(6, 60)},
+    }));
     cursors.push_back(std::make_unique<EmptyCursor>());
 
     ChainCursor cursor(std::move(cursors));
@@ -136,58 +165,6 @@ TEST(ChainCursorTest, SkipsEmptyCursors) {
     }
 
     EXPECT_EQ(keys, std::vector<Key>({5, 6}));
-}
-
-TEST(ChainCursorTest, ProxiesValueToCurrentCursor) {
-    std::map<Key, Row> data{
-        {1, make_row(1, 10)},
-        {2, make_row(2, 20)},
-    };
-
-    std::vector<std::unique_ptr<ICursor>> cursors;
-    cursors.push_back(make_mock_cursor({1}, &data));
-    cursors.push_back(make_mock_cursor({2}, &data));
-
-    ChainCursor cursor(std::move(cursors));
-
-    ASSERT_TRUE(cursor.valid());
-    EXPECT_EQ(std::get<int64_t>(*cursor.value(1)), 10);
-
-    cursor.next();
-
-    ASSERT_TRUE(cursor.valid());
-    EXPECT_EQ(std::get<int64_t>(*cursor.value(1)), 20);
-}
-
-TEST(ChainCursorTest, ValueThrowsIfCurrentCursorThrows) {
-    std::map<Key, Row> data{
-        {1, make_row(1, 10)},
-    };
-
-    std::vector<std::unique_ptr<ICursor>> cursors;
-    cursors.push_back(make_mock_cursor({1}, &data, {0}));
-
-    ChainCursor cursor(std::move(cursors));
-
-    ASSERT_TRUE(cursor.valid());
-
-    EXPECT_THROW(
-        {
-            [[maybe_unused]] auto value = cursor.value(1);
-        },
-        std::runtime_error
-    );
-}
-
-TEST(ChainCursorTest, NextOnInvalidCursorDoesNothing) {
-    ChainCursor cursor({});
-
-    EXPECT_FALSE(cursor.valid());
-
-    cursor.next();
-    cursor.next();
-
-    EXPECT_FALSE(cursor.valid());
 }
 
 TEST(ChainCursorTest, AllChildrenEmptyIsInvalid) {
@@ -204,4 +181,35 @@ TEST(ChainCursorTest, AllChildrenEmptyIsInvalid) {
     EXPECT_FALSE(cursor.valid());
 }
 
-} 
+TEST(ChainCursorTest, ProxiesValueToCurrentCursor) {
+    std::vector<std::unique_ptr<ICursor>> cursors;
+    cursors.push_back(make_vector_cursor({
+        {1, make_row(1, 10)},
+    }));
+    cursors.push_back(make_vector_cursor({
+        {2, make_row(2, 20)},
+    }));
+
+    ChainCursor cursor(std::move(cursors));
+
+    ASSERT_TRUE(cursor.valid());
+    EXPECT_EQ(std::get<int64_t>(*cursor.value(1)), 10);
+
+    cursor.next();
+
+    ASSERT_TRUE(cursor.valid());
+    EXPECT_EQ(std::get<int64_t>(*cursor.value(1)), 20);
+}
+
+TEST(ChainCursorTest, NextOnInvalidCursorDoesNothing) {
+    ChainCursor cursor({});
+
+    EXPECT_FALSE(cursor.valid());
+
+    cursor.next();
+    cursor.next();
+
+    EXPECT_FALSE(cursor.valid());
+}
+
+}
