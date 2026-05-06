@@ -12,12 +12,12 @@ void EmptyCursor::next() {
 }
 
 Key EmptyCursor::key() const {
-    throw std::logic_error("key() called on invalid cursor");
+    throw std::logic_error("EmptyCursor::key() called on invalid cursor");
 }
 
 NullableValue EmptyCursor::value(std::size_t column_idx) const {
     (void)column_idx;
-    throw std::logic_error("value() called on invalid cursor");
+    throw std::logic_error("EmptyCursor::value() called on invalid cursor");
 }
 
 }
