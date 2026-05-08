@@ -209,7 +209,7 @@ read::sstable::KeyRange range(std::optional<Key> from, std::optional<Key> to) {
     return result;
 }
 
-} // namespace
+} 
 
 TEST(SSTableColumnCursorTest, EmptyBlocksProduceInvalidCursor) {
     TempFile file("htap_sstable_column_cursor_empty_blocks.bin");
