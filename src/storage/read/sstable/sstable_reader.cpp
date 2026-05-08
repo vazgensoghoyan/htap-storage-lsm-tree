@@ -19,18 +19,26 @@ const std::filesystem::path& SSTableReader::path() const noexcept {
 }
 
 std::vector<char> SSTableReader::read_block(const RowBlockMeta& block) {
+    return read_bytes(block.offset, block.size);
+}
+
+std::vector<char> SSTableReader::read_block(const ColumnBlockMeta& block) {
+    return read_bytes(block.offset, block.size);
+}
+
+std::vector<char> SSTableReader::read_bytes(std::uint64_t offset, std::uint64_t size) {
     if (!input_.is_open()) {
         throw std::runtime_error("SSTable file is not open: " + path_.string());
     }
 
-    std::vector<char> buffer(static_cast<std::size_t>(block.size));
+    std::vector<char> buffer(static_cast<std::size_t>(size));
 
     if (buffer.empty()) {
         return buffer;
     }
 
     input_.clear();
-    input_.seekg(static_cast<std::streamoff>(block.offset), std::ios::beg);
+    input_.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
 
     if (!input_) {
         throw std::runtime_error("Cannot seek SSTable file: " + path_.string());
