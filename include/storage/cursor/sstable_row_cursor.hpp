@@ -2,7 +2,7 @@
 
 #include "storage/api/cursor_interface.hpp"
 #include "storage/api/types.hpp"
-#include "storage/read/sstable/block_meta.hpp"
+#include "storage/read/sstable/row_block_meta.hpp"
 #include "storage/read/sstable/key_range.hpp"
 #include "storage/read/sstable/sstable_reader.hpp"
 
@@ -16,7 +16,7 @@ class SSTableRowCursor final : public ICursor {
 public:
     explicit SSTableRowCursor(
         std::filesystem::path path,
-        std::vector<read::sstable::BlockMeta> blocks,
+        std::vector<read::sstable::RowBlockMeta> blocks,
         read::sstable::KeyRange range,
         std::vector<ValueType> schema,
         std::vector<std::size_t> projection
@@ -35,7 +35,7 @@ private:
 
 private:
     read::sstable::SSTableReader reader_;
-    std::vector<read::sstable::BlockMeta> blocks_;
+    std::vector<read::sstable::RowBlockMeta> blocks_;
     read::sstable::KeyRange range_;
     std::vector<ValueType> schema_;
     std::vector<std::size_t> projection_;

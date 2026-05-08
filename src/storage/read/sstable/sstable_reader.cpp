@@ -18,7 +18,7 @@ const std::filesystem::path& SSTableReader::path() const noexcept {
     return path_;
 }
 
-std::vector<char> SSTableReader::read_block(const BlockMeta& block) {
+std::vector<char> SSTableReader::read_block(const RowBlockMeta& block) {
     if (!input_.is_open()) {
         throw std::runtime_error("SSTable file is not open: " + path_.string());
     }

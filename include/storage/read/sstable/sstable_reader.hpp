@@ -1,6 +1,6 @@
 #pragma once
 
-#include "storage/read/sstable/block_meta.hpp"
+#include "storage/read/sstable/row_block_meta.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -13,7 +13,7 @@ public:
     explicit SSTableReader(std::filesystem::path path);
 
     const std::filesystem::path& path() const noexcept;
-    std::vector<char> read_block(const BlockMeta& block);
+    std::vector<char> read_block(const RowBlockMeta& block);
 
 private:
     void ensure_open() const;

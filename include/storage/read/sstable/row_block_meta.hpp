@@ -7,7 +7,7 @@
 
 namespace htap::storage::read::sstable {
 
-struct BlockMeta {
+struct RowBlockMeta {
     Key min_key;
     Key max_key;
 

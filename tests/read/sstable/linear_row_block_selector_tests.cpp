@@ -1,4 +1,4 @@
-#include "storage/read/sstable/linear_block_selector.hpp"
+#include "storage/read/sstable/linear_row_block_selector.hpp"
 
 #include <gtest/gtest.h>
 
@@ -10,12 +10,12 @@
 namespace {
 
 using htap::storage::Key;
-using htap::storage::read::sstable::BlockMeta;
+using htap::storage::read::sstable::RowBlockMeta;
 using htap::storage::read::sstable::KeyRange;
-using htap::storage::read::sstable::LinearBlockSelector;
+using htap::storage::read::sstable::LinearRowBlockSelector;
 
-BlockMeta MakeBlock(Key min_key, Key max_key, std::size_t block_id) {
-    return BlockMeta{
+RowBlockMeta MakeBlock(Key min_key, Key max_key, std::size_t block_id) {
+    return RowBlockMeta{
         .min_key = min_key,
         .max_key = max_key,
         .offset = static_cast<std::uint64_t>(block_id * 100),
@@ -25,7 +25,7 @@ BlockMeta MakeBlock(Key min_key, Key max_key, std::size_t block_id) {
     };
 }
 
-std::vector<std::size_t> BlockIds(const std::vector<BlockMeta>& blocks) {
+std::vector<std::size_t> BlockIds(const std::vector<RowBlockMeta>& blocks) {
     std::vector<std::size_t> ids;
 
     for (const auto& block : blocks) {
@@ -35,8 +35,8 @@ std::vector<std::size_t> BlockIds(const std::vector<BlockMeta>& blocks) {
     return ids;
 }
 
-TEST(LinearBlockSelectorTest, EmptySelectorSelectsNoBlocks) {
-    LinearBlockSelector selector({});
+TEST(LinearRowBlockSelectorTest, EmptySelectorSelectsNoBlocks) {
+    LinearRowBlockSelector selector({});
 
     auto selected = selector.select_blocks(KeyRange{
         .from = 10,
@@ -46,8 +46,8 @@ TEST(LinearBlockSelectorTest, EmptySelectorSelectsNoBlocks) {
     EXPECT_TRUE(selected.empty());
 }
 
-TEST(LinearBlockSelectorTest, FullRangeSelectsAllBlocks) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, FullRangeSelectsAllBlocks) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(10, 20, 1),
         MakeBlock(20, 30, 2),
@@ -61,8 +61,8 @@ TEST(LinearBlockSelectorTest, FullRangeSelectsAllBlocks) {
     EXPECT_EQ(BlockIds(selected), std::vector<std::size_t>({0, 1, 2}));
 }
 
-TEST(LinearBlockSelectorTest, SelectsIntersectingBlocksForHalfOpenRange) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, SelectsIntersectingBlocksForHalfOpenRange) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(10, 20, 1),
         MakeBlock(20, 30, 2),
@@ -77,8 +77,8 @@ TEST(LinearBlockSelectorTest, SelectsIntersectingBlocksForHalfOpenRange) {
     EXPECT_EQ(BlockIds(selected), std::vector<std::size_t>({1, 2, 3}));
 }
 
-TEST(LinearBlockSelectorTest, DoesNotSelectBlockEndingAtRangeFrom) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, DoesNotSelectBlockEndingAtRangeFrom) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(10, 20, 1),
         MakeBlock(20, 30, 2),
@@ -92,8 +92,8 @@ TEST(LinearBlockSelectorTest, DoesNotSelectBlockEndingAtRangeFrom) {
     EXPECT_EQ(BlockIds(selected), std::vector<std::size_t>({1}));
 }
 
-TEST(LinearBlockSelectorTest, DoesNotSelectBlockStartingAtExclusiveTo) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, DoesNotSelectBlockStartingAtExclusiveTo) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(10, 20, 1),
         MakeBlock(20, 30, 2),
@@ -107,8 +107,8 @@ TEST(LinearBlockSelectorTest, DoesNotSelectBlockStartingAtExclusiveTo) {
     EXPECT_EQ(BlockIds(selected), std::vector<std::size_t>({0, 1}));
 }
 
-TEST(LinearBlockSelectorTest, SelectsBlockContainingRangeFrom) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, SelectsBlockContainingRangeFrom) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(10, 20, 1),
     });
@@ -121,8 +121,8 @@ TEST(LinearBlockSelectorTest, SelectsBlockContainingRangeFrom) {
     EXPECT_EQ(BlockIds(selected), std::vector<std::size_t>({0, 1}));
 }
 
-TEST(LinearBlockSelectorTest, RangeBeforeAllBlocksSelectsNoBlocks) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, RangeBeforeAllBlocksSelectsNoBlocks) {
+    LinearRowBlockSelector selector({
         MakeBlock(10, 20, 0),
         MakeBlock(20, 30, 1),
     });
@@ -135,8 +135,8 @@ TEST(LinearBlockSelectorTest, RangeBeforeAllBlocksSelectsNoBlocks) {
     EXPECT_TRUE(selected.empty());
 }
 
-TEST(LinearBlockSelectorTest, RangeAfterAllBlocksSelectsNoBlocks) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, RangeAfterAllBlocksSelectsNoBlocks) {
+    LinearRowBlockSelector selector({
         MakeBlock(10, 20, 0),
         MakeBlock(20, 30, 1),
     });
@@ -149,8 +149,8 @@ TEST(LinearBlockSelectorTest, RangeAfterAllBlocksSelectsNoBlocks) {
     EXPECT_TRUE(selected.empty());
 }
 
-TEST(LinearBlockSelectorTest, OpenEndedFromSelectsPrefixBlocks) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, OpenEndedFromSelectsPrefixBlocks) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(10, 20, 1),
         MakeBlock(20, 30, 2),
@@ -164,8 +164,8 @@ TEST(LinearBlockSelectorTest, OpenEndedFromSelectsPrefixBlocks) {
     EXPECT_EQ(BlockIds(selected), std::vector<std::size_t>({0, 1}));
 }
 
-TEST(LinearBlockSelectorTest, OpenEndedToSelectsSuffixBlocks) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, OpenEndedToSelectsSuffixBlocks) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(10, 20, 1),
         MakeBlock(20, 30, 2),
@@ -179,8 +179,8 @@ TEST(LinearBlockSelectorTest, OpenEndedToSelectsSuffixBlocks) {
     EXPECT_EQ(BlockIds(selected), std::vector<std::size_t>({1, 2}));
 }
 
-TEST(LinearBlockSelectorTest, SelectBlockForExistingKey) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, SelectBlockForExistingKey) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(10, 20, 1),
         MakeBlock(20, 30, 2),
@@ -192,8 +192,8 @@ TEST(LinearBlockSelectorTest, SelectBlockForExistingKey) {
     EXPECT_EQ(block->block_id, 1);
 }
 
-TEST(LinearBlockSelectorTest, SelectBlockForKeyOnLowerBoundary) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, SelectBlockForKeyOnLowerBoundary) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(10, 20, 1),
     });
@@ -204,8 +204,8 @@ TEST(LinearBlockSelectorTest, SelectBlockForKeyOnLowerBoundary) {
     EXPECT_EQ(block->block_id, 1);
 }
 
-TEST(LinearBlockSelectorTest, SelectBlockForKeyOnExclusiveUpperBoundary) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, SelectBlockForKeyOnExclusiveUpperBoundary) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(10, 20, 1),
     });
@@ -215,8 +215,8 @@ TEST(LinearBlockSelectorTest, SelectBlockForKeyOnExclusiveUpperBoundary) {
     EXPECT_FALSE(block.has_value());
 }
 
-TEST(LinearBlockSelectorTest, SelectBlockForMissingKeyReturnsNullopt) {
-    LinearBlockSelector selector({
+TEST(LinearRowBlockSelectorTest, SelectBlockForMissingKeyReturnsNullopt) {
+    LinearRowBlockSelector selector({
         MakeBlock(0, 10, 0),
         MakeBlock(20, 30, 1),
     });
@@ -226,7 +226,7 @@ TEST(LinearBlockSelectorTest, SelectBlockForMissingKeyReturnsNullopt) {
     EXPECT_FALSE(block.has_value());
 }
 
-TEST(LinearBlockSelectorTest, ContainsUsesHalfOpenRange) {
+TEST(LinearRowBlockSelectorTest, ContainsUsesHalfOpenRange) {
     KeyRange range{
         .from = 10,
         .to = 20,

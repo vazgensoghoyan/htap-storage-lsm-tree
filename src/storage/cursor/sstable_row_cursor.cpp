@@ -133,7 +133,7 @@ std::vector<Row> decode_row_block(
 
 SSTableRowCursor::SSTableRowCursor(
         std::filesystem::path path,
-        std::vector<read::sstable::BlockMeta> blocks,
+        std::vector<read::sstable::RowBlockMeta> blocks,
         read::sstable::KeyRange range,
         std::vector<ValueType> schema,
         std::vector<std::size_t> projection

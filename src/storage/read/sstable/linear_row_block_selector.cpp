@@ -1,19 +1,19 @@
-#include "storage/read/sstable/linear_block_selector.hpp"
+#include "storage/read/sstable/linear_row_block_selector.hpp"
 
 #include <utility>
 
 namespace htap::storage::read::sstable {
 
-LinearBlockSelector::LinearBlockSelector(std::vector<BlockMeta> blocks)
+LinearRowBlockSelector::LinearRowBlockSelector(std::vector<RowBlockMeta> blocks)
     : blocks_(std::move(blocks)) {
 }
 
-const std::vector<BlockMeta>& LinearBlockSelector::blocks() const {
+const std::vector<RowBlockMeta>& LinearRowBlockSelector::blocks() const {
     return blocks_;
 }
 
-std::vector<BlockMeta> LinearBlockSelector::select_blocks(const KeyRange& range) const {
-    std::vector<BlockMeta> selected;
+std::vector<RowBlockMeta> LinearRowBlockSelector::select_blocks(const KeyRange& range) const {
+    std::vector<RowBlockMeta> selected;
 
     for (const auto& block : blocks_) {
         if (intersects(block, range)) {
@@ -24,7 +24,7 @@ std::vector<BlockMeta> LinearBlockSelector::select_blocks(const KeyRange& range)
     return selected;
 }
 
-std::optional<BlockMeta> LinearBlockSelector::select_block_for_key(Key key) const {
+std::optional<RowBlockMeta> LinearRowBlockSelector::select_block_for_key(Key key) const {
     for (const auto& block : blocks_) {
         if (block.min_key <= key && key < block.max_key) {
             return block;
@@ -34,7 +34,7 @@ std::optional<BlockMeta> LinearBlockSelector::select_block_for_key(Key key) cons
     return std::nullopt;
 }
 
-bool LinearBlockSelector::intersects(const BlockMeta& block, const KeyRange& range) {
+bool LinearRowBlockSelector::intersects(const RowBlockMeta& block, const KeyRange& range) {
 
     if (range.from.has_value() && block.max_key <= *range.from) {
         return false;
