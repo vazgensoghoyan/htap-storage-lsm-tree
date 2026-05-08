@@ -14,8 +14,8 @@ TEST(MemTableTest, EmptyInitially) {
 TEST(MemTableTest, InsertIncreasesSize) {
     MemTable mem;
 
-    mem.insert(1, {1, 100});
-    mem.insert(2, {2, 200});
+    mem.insert({1, 100});
+    mem.insert({2, 200});
 
     EXPECT_EQ(mem.size(), 2);
 }
@@ -23,8 +23,8 @@ TEST(MemTableTest, InsertIncreasesSize) {
 TEST(MemTableTest, InsertOverwriteSameKey) {
     MemTable mem;
 
-    mem.insert(1, {1, 100});
-    mem.insert(1, {1, 999}); // overwrite
+    mem.insert({1, 100});
+    mem.insert({1, 999}); // overwrite
 
     EXPECT_EQ(mem.size(), 1);
 }
@@ -32,8 +32,8 @@ TEST(MemTableTest, InsertOverwriteSameKey) {
 TEST(MemTableTest, FreezeClearsMemTable) {
     MemTable mem;
 
-    mem.insert(1, {1, 100});
-    mem.insert(2, {2, 200});
+    mem.insert({1, 100});
+    mem.insert({2, 200});
 
     auto imm = mem.freeze();
 
@@ -44,9 +44,9 @@ TEST(MemTableTest, FreezeClearsMemTable) {
 TEST(MemTableTest, FreezeMovesAllData) {
     MemTable mem;
 
-    mem.insert(1, {1, 100});
-    mem.insert(2, {2, 200});
-    mem.insert(3, {3, 300});
+    mem.insert({1, 100});
+    mem.insert({2, 200});
+    mem.insert({3, 300});
 
     auto imm = mem.freeze();
 
@@ -57,10 +57,10 @@ TEST(MemTableTest, FreezeMovesAllData) {
 TEST(MemTableTest, InsertAfterFreezeWorks) {
     MemTable mem;
 
-    mem.insert(1, {1, 100});
+    mem.insert({1, 100});
     auto imm = mem.freeze();
 
-    mem.insert(2, {2, 200});
+    mem.insert({2, 200});
 
     EXPECT_EQ(mem.size(), 1);
 }

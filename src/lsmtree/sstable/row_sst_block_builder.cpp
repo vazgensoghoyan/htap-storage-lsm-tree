@@ -1,6 +1,7 @@
 #include "lsmtree/sstable/row_sst_block_builder.hpp"
 
 #include <limits>
+#include <cstring>
 
 using namespace htap::lsmtree;
 using namespace htap::storage;
@@ -57,8 +58,8 @@ void RowSSTBlockBuilder::add(const Row& row) {
 
     Key key = std::get<Key>(*row[KEY_COLUMN_INDEX]);
 
-    if (key < min_key_) min_key_ = key;
-    if (key > max_key_) max_key_ = key;
+    min_key_ = std::min(key, min_key_);
+    max_key_ = std::max(key, max_key_);
 
     encode_row(row);
     row_count_++;

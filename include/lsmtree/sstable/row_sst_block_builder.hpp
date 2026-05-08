@@ -1,15 +1,13 @@
 #pragma once // lsmtree/sstable/row_sst_block_builder.hpp
 
 #include <cstdint>
-#include <cstddef>
-#include <cstring>
 
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
 
 namespace htap::lsmtree {
 
-
+// #pragma pack(push, 1) не знаю, стоит ли
 struct RowBlockMeta {
     int64_t min_key;
     int64_t max_key;
@@ -24,7 +22,7 @@ struct SSTBlockResult {
     std::vector<uint8_t> data;   // бинарный блок
     RowBlockMeta meta;
 };
-
+// #pragma pack(pop)
 
 class RowSSTBlockBuilder {
 public:
@@ -49,8 +47,8 @@ private:
 
     std::vector<uint8_t> buffer_;
 
-    Key min_key_;
-    Key max_key_;
+    storage::Key min_key_;
+    storage::Key max_key_;
 
     uint32_t row_count_;
 
@@ -58,6 +56,5 @@ private:
 
     static constexpr size_t TARGET_BLOCK_SIZE_BYTES = 4 * 1024; // 4 КБ
 };
-
 
 } // namespace htap::lsmtree
