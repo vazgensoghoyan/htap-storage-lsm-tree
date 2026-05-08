@@ -23,6 +23,8 @@ struct SSTFooter {
     uint32_t magic;        // "SST1", например
     uint32_t num_blocks;
     uint64_t meta_offset;  // offset начала META INDEX
+    uint64_t min_key;
+    uint64_t max_key;
     uint8_t layout_type;   // 0 = ROW, 1 = COLUMN
 };
 ```
@@ -39,18 +41,6 @@ struct SSTFooter {
 ...
 [Block_N_meta]
 ```
-    int64_t max_key;
-    int16_t column_id;
-    uint32_t values_count;
-    uint64_t offset;
-};
-```
-
-RMK: чтобы найти конкретную 
-
----
-
-## Row Block Meta
 
 ```cpp
 struct RowBlockMeta {
@@ -58,18 +48,14 @@ struct RowBlockMeta {
     int64_t  max_key;
     uint32_t row_count;
     uint64_t offset;     // начало блока
+    uint64_t size_bytes;
+    uint32_t block_id;
 };
 ```
 
-### Назначение:
-
-* быстрый skip блоков при scan
-* определение диапазона ключей
-* навигация по файлу через offset
-
----
-
 ### RMK:
+
+Пока не вводим массив row_ofsets для бин поиска, предполагается, что тут и линейный скан пока что норм. Потом возможно захотим ввести. Стоит поначалу попробовать 64-256 строк в блоке.
 
 Row block header-а нет, он не нужен. В части [DATA BLOCKS] просто хранятся подряд идущие много Row. Вся информация о том, где блок начинается и где заканчивается есть в части [META ABOUT BLOCKS], там все offset-ы и даже доп инфа, чтобы пропускать блоки или делать бин поиск если нужно.
 
@@ -86,8 +72,10 @@ struct ColumnBlockMeta {
     int64_t min_key;
     int64_t max_key;
     int16_t column_id;
-    uint32_t values_count;
+    uint32_t values_count; // надо ли????? если все равно могут быть null-ы
     uint64_t offset;
+    uint64_t size_bytes;
+    uint32_t block_id;
 };
 ```
 
@@ -119,6 +107,7 @@ struct ColumnMeta {
 [values...]
 ```
 
+Key не дублируется в values. И key у нас по всему хранилищу даже на уровне пользователя по схеме всегда обязан быть первой колонкой и всегда not null int64. Это наши требования.
 На каждое значение кроме string уходит 8 байт. Формат хранения строк: uint32 length, bytes[ length ].
 
 ---
@@ -139,116 +128,27 @@ struct ColumnMeta {
 
 ```text
 [null_bitmap]   // сразу на весь блок, size = ceil(block_rows / 8)
-[data]          // values_count (из meta index) значений
+[data]          // только значения не null, то есть их может быть меньше чем values_count
 ```
 
 ## COLUMN DATA BLOCK STRUCTURE
 
 ```text
 [ColumnBlock(key)]
+[ColumnBlock(key)]
+[ColumnBlock(key)]
 [ColumnBlock(col1)]
+[ColumnBlock(col1)]
+[ColumnBlock(col1)]
+[ColumnBlock(col1)]
+[ColumnBlock(col2)]
+[ColumnBlock(col2)]
 [ColumnBlock(col2)]
 ...
 ```
 
 Все column blocks идут параллельно внутри одного logical row block.
 
----
+# Endiannes
 
-## Block boundaries
-
-Определяются через META INDEX:
-
-```text
-size(block[i]) = meta[i+1].offset - meta[i].offset
-```
-
-(или footer boundary для последнего)
-
----
----
----
-
-# Чтение из SSTable (по шагам)
-
-## 1. Открытие SSTable
-
-* если файл ещё не открыт → открываем file descriptor
-* читаем footer с конца файла
-
-## 2. Разбор footer
-
-* проверяем `magic`
-* определяем `layout_type` (ROW / COLUMN)
-* читаем `meta_offset`
-* читаем `num_blocks`
-
-## 3. Загрузка META INDEX
-
-* читаем блок `RowBlockMeta[]` (или ColumnBlockMeta[])
-* кладём в память (или кешируем отдельно как index-cache)
-
-## 4. Поиск подходящих блоков (pruning)
-
-* для key или range:
-  * идём по meta index
-  * выбираем блоки где:
-
-```text
-min_key <= key < max_key
-```
-
-или пересечение диапазона
-
-## 5. Проверка block cache
-
-для каждого выбранного блока:
-
-* формируем `cache_key = (sst_id, block_id)`
-* проверяем LRU cache:
-  * если есть → используем готовый блок
-  * если нет → читаем с диска
-  * тут появляются тактики кеширования
-
-## 6. Чтение блока с диска (cache miss)
-
-* делаем `pread(offset, size)`
-* получаем бинарный block
-* кладём в cache
-* продолжаем
-
-## 7. Декодирование блока
-
-### ROW:
-
-* читаем RowBlockHeader
-* читаем строки последовательно:
-  * key
-  * null_bitmap
-  * values
-
-### COLUMN:
-
-* читаем ColumnBlockHeader
-* читаем столбцы
-* собираем row по projection
-
-## 8. Фильтрация по key
-
-* если точечный get:
-  * внутри блока ищем key (бинарный поиск)
-* если scan:
-  * идём по всем строкам блока (начало и конец можно бинарным поиском, если будет давать улучшение)
-
-## 9. Возврат результата через Cursor
-
-* строки не копируются сразу
-* Cursor отдаёт:
-  * key()
-  * value(col)
-  * next()
-
-## 10. Merge на уровне LSM (если несколько SST)
-
-* результаты нескольких SST cursors сливаются через MergeCursor
-* порядок гарантируется по key
+Думаю, четко зафиксируем little-endian.

@@ -13,7 +13,7 @@ class MemTable {
 public:
     MemTable() = default;
 
-    void insert(storage::Key key, const storage::Row& row);
+    void insert(const storage::Row& row);
 
     size_t size() const;
 
