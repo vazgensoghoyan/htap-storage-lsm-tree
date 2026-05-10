@@ -7,7 +7,6 @@
 
 namespace htap::lsmtree {
 
-// #pragma pack(push, 1) не знаю, стоит ли
 struct RowBlockMeta {
     int64_t min_key;
     int64_t max_key;
@@ -17,12 +16,10 @@ struct RowBlockMeta {
     uint32_t block_id;      // это сам заполняет SSTableBuilder
 };
 
-
-struct SSTBlockResult {
+struct RowSSTBlockResult {
     std::vector<uint8_t> data;   // бинарный блок
     RowBlockMeta meta;
 };
-// #pragma pack(pop)
 
 class RowSSTBlockBuilder {
 public:
@@ -35,7 +32,7 @@ public:
     bool full() const;
     size_t size_bytes() const;
 
-    SSTBlockResult finish(); // после этого сделается автоматический reset
+    RowSSTBlockResult finish(); // после этого сделается автоматический reset
 
     void reset();
 

@@ -31,7 +31,7 @@ size_t RowSSTBlockBuilder::size_bytes() const {
 
 // FINISHING
 
-SSTBlockResult RowSSTBlockBuilder::finish() {
+RowSSTBlockResult RowSSTBlockBuilder::finish() {
     RowBlockMeta meta {
         .min_key = min_key_,
         .max_key = max_key_,
@@ -41,7 +41,7 @@ SSTBlockResult RowSSTBlockBuilder::finish() {
         .block_id = 0       // тоже заполнит SSTableBuilder
     };
 
-    SSTBlockResult result {
+    RowSSTBlockResult result {
         .data = std::move(buffer_),
         .meta = meta
     };
@@ -97,7 +97,7 @@ void write_value_by_type(std::vector<uint8_t>& buf, const NullableValue& val, Va
             write_pod(buf, v);
             break;
         } case ValueType::STRING: {
-            auto v = std::get<std::string>(*val);
+            const std::string& v = std::get<std::string>(*val);
             write_string(buf, v);
             break;
         }

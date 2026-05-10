@@ -10,7 +10,6 @@ static constexpr uint8_t COLUMN_LAYOUT = 1;
 
 static constexpr uint32_t SST_MAGIC = 0x53535431; // "SST1" в little-endian
 
-// #pragma pack(push, 1) не знаю, стоит ли
 struct SSTFooter {
     uint32_t magic = SST_MAGIC; // "SST1" например
 
@@ -22,6 +21,5 @@ struct SSTFooter {
 
     uint8_t layout_type; // ROW or COLUMN
 };
-// #pragma pack(pop)
 
 } // namespace htap::lsmtree

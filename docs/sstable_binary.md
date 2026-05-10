@@ -59,36 +59,6 @@ struct RowBlockMeta {
 
 Row block header-а нет, он не нужен. В части [DATA BLOCKS] просто хранятся подряд идущие много Row. Вся информация о том, где блок начинается и где заканчивается есть в части [META ABOUT BLOCKS], там все offset-ы и даже доп инфа, чтобы пропускать блоки или делать бин поиск если нужно.
 
-Block_id тоже явно не вводится, потому что пока что этот простой "индекс", если так вообще можно это назвать, имеет фиксированные размеры мета инфы на каждый блок. Нумерация просто идет 0, 1, ...
-
----
-
-## Column Block Meta
-
-(если COLUMN layout)
-
-```cpp
-struct ColumnBlockMeta {
-    int64_t min_key;
-    int64_t max_key;
-    int16_t column_id;
-    uint32_t values_count; // надо ли????? если все равно могут быть null-ы
-    uint64_t offset;
-    uint64_t size_bytes;
-    uint32_t block_id;
-};
-```
-
-RMK: чтобы найти конкретную колонку, нужно видимо бин поиск делать по column_id этой части файла. Есть вариант расширить эту часть файла.
-
-```
-struct ColumnMeta {
-    int16_t block_id; // первый блок который принадлежит этой колонке
-}
-```
-
-Это пусть будет в начале части [META INDEX].
-
 ---
 
 # DATA BLOCKS
@@ -130,6 +100,26 @@ Key не дублируется в values. И key у нас по всему хр
 [null_bitmap]   // сразу на весь блок, size = ceil(block_rows / 8)
 [data]          // только значения не null, то есть их может быть меньше чем values_count
 ```
+
+---
+
+## Column Block Meta
+
+(если COLUMN layout)
+
+```cpp
+struct ColumnBlockMeta {
+    int64_t min_key;
+    int64_t max_key;
+    int16_t column_id;
+    uint32_t values_count;
+    uint64_t offset;
+    uint64_t size_bytes;
+    uint32_t block_id;
+};
+```
+
+RMK: чтобы найти конкретную колонку, нужно видимо бин поиск делать по column_id этой части файла. Есть вариант расширить эту часть файла.
 
 ## COLUMN DATA BLOCK STRUCTURE
 
