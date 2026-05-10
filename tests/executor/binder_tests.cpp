@@ -58,15 +58,6 @@ std::unique_ptr<parser::Expression> MakeNullLiteral() {
     return std::make_unique<parser::NullLiteral>();
 }
 
-std::unique_ptr<parser::Expression> MakeUnaryExpr(
-    parser::UnaryOperation op,
-    std::unique_ptr<parser::Expression> inner) {
-    auto expr = std::make_unique<parser::UnaryExpression>();
-    expr->operation = op;
-    expr->expression = std::move(inner);
-    return expr;
-}
-
 std::unique_ptr<parser::Expression> MakeBinaryExpr(
     parser::BinaryOperation op,
     std::unique_ptr<parser::Expression> left,
@@ -75,15 +66,6 @@ std::unique_ptr<parser::Expression> MakeBinaryExpr(
     expr->operation = op;
     expr->left = std::move(left);
     expr->right = std::move(right);
-    return expr;
-}
-
-std::unique_ptr<parser::Expression> MakeIsNullExpr(
-    std::unique_ptr<parser::Expression> inner,
-    bool is_not) {
-    auto expr = std::make_unique<parser::IsNullExpression>();
-    expr->expression = std::move(inner);
-    expr->is_not = is_not;
     return expr;
 }
 
@@ -138,7 +120,7 @@ TEST(BinderCreateTable, BindsValidCreateTableStatement) {
     ASSERT_NE(create, nullptr);
     EXPECT_EQ(create->table_name, "employees");
     EXPECT_EQ(create->schema.size(), 3u);
-    EXPECT_EQ(create->schema.key_column_index(), 0u);
+    EXPECT_EQ(storage::KEY_COLUMN_INDEX, 0u);
     EXPECT_EQ(create->schema.get_column(0).name, "id");
     EXPECT_EQ(create->schema.get_column(0).type, storage::ValueType::INT64);
     EXPECT_TRUE(create->schema.get_column(0).is_key);

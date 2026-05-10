@@ -38,6 +38,9 @@ public:
     // Ошибка при плохом индексе
     const Column& get_column(size_t index) const;
 
+    // Найти индекс колонки по имени
+    std::optional<size_t> get_column_index(const std::string& name) const noexcept;
+
     // Количество колонок
     size_t size() const noexcept;
 
@@ -46,6 +49,7 @@ public:
 
 private:
     std::vector<Column> columns_;
+    std::unordered_map<std::string, size_t> name_to_index_;
 };
 
 } // namespace htap::storage
