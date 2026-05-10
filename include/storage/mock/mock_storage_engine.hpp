@@ -28,9 +28,10 @@ public:
 
     std::unique_ptr<ICursor> scan(
         const std::string& table_name,
-        OptKey from,
-        OptKey to,
-        const std::vector<size_t>& projection
+        std::optional<Key> from,
+        std::optional<Key> to,
+        const std::vector<size_t>& projection,
+        ScanOrder order = ScanOrder::Unordered
     ) const override;
 
 private:
