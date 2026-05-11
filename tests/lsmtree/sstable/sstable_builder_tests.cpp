@@ -34,10 +34,22 @@ static SSTFooter read_footer(const std::string& path) {
     std::ifstream file(path, std::ios::binary);
     EXPECT_TRUE(file.is_open());
 
-    file.seekg(-static_cast<int>(sizeof(SSTFooter)), std::ios::end);
+    file.seekg(-(sizeof(uint32_t)
+                + sizeof(uint32_t)
+                + sizeof(uint64_t)
+                + sizeof(uint64_t)
+                + sizeof(uint64_t)
+                + sizeof(uint8_t)),
+               std::ios::end);
 
     SSTFooter footer{};
-    file.read(reinterpret_cast<char*>(&footer), sizeof(SSTFooter));
+
+    file.read(reinterpret_cast<char*>(&footer.magic), sizeof(uint32_t));
+    file.read(reinterpret_cast<char*>(&footer.num_blocks), sizeof(uint32_t));
+    file.read(reinterpret_cast<char*>(&footer.meta_offset), sizeof(uint64_t));
+    file.read(reinterpret_cast<char*>(&footer.min_key), sizeof(uint64_t));
+    file.read(reinterpret_cast<char*>(&footer.max_key), sizeof(uint64_t));
+    file.read(reinterpret_cast<char*>(&footer.layout_type), sizeof(uint8_t));
 
     return footer;
 }
@@ -49,7 +61,15 @@ static std::vector<RowBlockMeta> read_meta(const std::string& path, const SSTFoo
     file.seekg(footer.meta_offset);
 
     std::vector<RowBlockMeta> meta(footer.num_blocks);
-    file.read(reinterpret_cast<char*>(meta.data()), meta.size() * sizeof(RowBlockMeta));
+
+    for (auto& m : meta) {
+        file.read(reinterpret_cast<char*>(&m.min_key), sizeof(int64_t));
+        file.read(reinterpret_cast<char*>(&m.max_key), sizeof(int64_t));
+        file.read(reinterpret_cast<char*>(&m.row_count), sizeof(uint32_t));
+        file.read(reinterpret_cast<char*>(&m.offset), sizeof(uint64_t));
+        file.read(reinterpret_cast<char*>(&m.size_bytes), sizeof(uint64_t));
+        file.read(reinterpret_cast<char*>(&m.block_id), sizeof(uint32_t));
+    }
 
     return meta;
 }

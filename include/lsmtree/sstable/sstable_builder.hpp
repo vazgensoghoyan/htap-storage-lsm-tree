@@ -10,6 +10,8 @@
 #include "lsmtree/sstable/row_sst_block_builder.hpp"
 #include "lsmtree/sstable/sst_footer.hpp"
 
+#include "utils/binary_writer.hpp"
+
 namespace htap::lsmtree {
 
 class SSTableBuilder {
@@ -27,6 +29,7 @@ private:
     const storage::Schema& schema_;
 
     std::ofstream file_;
+    htap::utils::BinaryWriter writer_;
 
     RowSSTBlockBuilder block_builder_;
     std::vector<RowBlockMeta> meta_;

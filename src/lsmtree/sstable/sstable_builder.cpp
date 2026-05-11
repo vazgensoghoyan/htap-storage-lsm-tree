@@ -10,6 +10,7 @@ using namespace htap::storage;
 SSTableBuilder::SSTableBuilder(const Schema& schema, const std::string& path)
     : schema_(schema)
     , file_(path, std::ios::binary)
+    , writer_(file_)
     , block_builder_(schema)
     , global_min_(std::numeric_limits<int64_t>::max())
     , global_max_(std::numeric_limits<int64_t>::min())
@@ -49,11 +50,7 @@ void SSTableBuilder::flush_block() {
     auto result = block_builder_.finish();
     uint64_t offset = file_offset_;
 
-    file_.write(
-        reinterpret_cast<const char*>(result.data.data()),
-        result.data.size()
-    );
-
+    writer_.write_bytes(result.data.data(), result.data.size());
     file_offset_ += result.data.size();
 
     RowBlockMeta meta = result.meta;
@@ -90,11 +87,8 @@ void SSTableBuilder::finish() {
 
     uint64_t meta_offset = file_offset_;
 
-    for (size_t i = 0; i < meta_.size(); ++i) {
-        const auto& m = meta_[i];
-
-        LOG_DEBUG("Write meta block {}: id={}, min_key={}, max_key={}, rows={}, size_bytes={}, offset={}",
-                i,
+    for (const auto& m : meta_) {
+        LOG_DEBUG("Write meta block: id={}, min_key={}, max_key={}, rows={}, size_bytes={}, offset={}",
                 m.block_id,
                 m.min_key,
                 m.max_key,
@@ -102,12 +96,23 @@ void SSTableBuilder::finish() {
                 m.size_bytes,
                 m.offset);
 
-        file_.write(reinterpret_cast<const char*>(&m), sizeof(RowBlockMeta));
-        file_offset_ += sizeof(RowBlockMeta);
+        writer_.write_u64(static_cast<uint64_t>(m.min_key));
+        writer_.write_u64(static_cast<uint64_t>(m.max_key));
+        writer_.write_u32(m.row_count);
+        writer_.write_u64(m.offset);
+        writer_.write_u64(m.size_bytes);
+        writer_.write_u32(m.block_id);
+
+        file_offset_ += sizeof(m.min_key)
+                      + sizeof(m.max_key)
+                      + sizeof(m.row_count)
+                      + sizeof(m.offset)
+                      + sizeof(m.size_bytes)
+                      + sizeof(m.block_id);
     }
 
     SSTFooter footer;
-    footer.num_blocks = meta_.size();
+    footer.num_blocks = static_cast<uint32_t>(meta_.size());
     footer.meta_offset = meta_offset;
     footer.min_key = global_min_;
     footer.max_key = global_max_;
@@ -119,8 +124,19 @@ void SSTableBuilder::finish() {
             footer.max_key,
             footer.meta_offset);
 
-    file_.write(reinterpret_cast<const char*>(&footer), sizeof(SSTFooter));
-    file_offset_ += sizeof(SSTFooter);
+    writer_.write_u32(footer.magic);
+    writer_.write_u32(footer.num_blocks);
+    writer_.write_u64(footer.meta_offset);
+    writer_.write_u64(static_cast<uint64_t>(footer.min_key));
+    writer_.write_u64(static_cast<uint64_t>(footer.max_key));
+    writer_.write_u8(footer.layout_type);
+
+    file_offset_ += sizeof(footer.magic)
+                  + sizeof(footer.num_blocks)
+                  + sizeof(footer.meta_offset)
+                  + sizeof(footer.min_key)
+                  + sizeof(footer.max_key)
+                  + sizeof(footer.layout_type);
 
     file_.flush();
 
