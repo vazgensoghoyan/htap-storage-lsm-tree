@@ -26,3 +26,15 @@ void MemoryLayer::force_freeze() {
 size_t MemoryLayer::immutable_count() const {
     return immutables_.size();
 }
+
+std::unique_ptr<ImmutableMemTable> MemoryLayer::pop_immutable() {
+    if (immutables_.empty())
+        return nullptr;
+
+    auto imm = std::move(immutables_.front());
+    immutables_.pop_front();
+
+    LOG_INFO("ImmutableMemTable popped");
+
+    return imm;
+}

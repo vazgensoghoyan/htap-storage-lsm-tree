@@ -1,6 +1,6 @@
 #pragma once // lsmtree/mem/memory_layer.hpp
 
-#include <vector>
+#include <deque>
 #include <memory>
 #include <optional>
 
@@ -23,11 +23,13 @@ public:
 
     size_t immutable_count() const;
 
+    std::unique_ptr<ImmutableMemTable> pop_immutable();
+
 private:
     size_t threshold_;
 
     std::unique_ptr<MemTable> active_;
-    std::vector<std::unique_ptr<ImmutableMemTable>> immutables_;
+    std::deque<std::unique_ptr<ImmutableMemTable>> immutables_;
 };
 
 } // namespace htap::lsmtree
