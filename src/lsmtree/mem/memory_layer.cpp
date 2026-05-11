@@ -6,8 +6,8 @@ using namespace htap::storage;
 
 MemoryLayer::MemoryLayer(size_t threshold) : threshold_(threshold), active_(std::make_unique<MemTable>()) {}
 
-void MemoryLayer::insert(Key key, const Row& row) {
-    active_->insert(key, row);
+void MemoryLayer::insert(const Row& row) {
+    active_->insert(row);
 
     if (active_->size() < threshold_) return;
     force_freeze();

@@ -17,7 +17,7 @@ class MemoryLayer {
 public:
     MemoryLayer(size_t threshold = DEFAULT_MEMTABLE_THRESHOLD);
 
-    void insert(storage::Key key, const storage::Row& row);
+    void insert(const storage::Row& row);
 
     void force_freeze();
 
