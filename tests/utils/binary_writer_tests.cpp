@@ -1,145 +1,162 @@
 #include <gtest/gtest.h>
 #include <sstream>
-#include <vector>
-#include <cstdint>
 #include <cstring>
+#include <cstdint>
 
 #include "utils/binary_writer.hpp"
 
-using htap::utils::BinaryWriter;
+using namespace htap::utils;
 
-static std::vector<uint8_t> stream_bytes(std::ostringstream& oss) {
-    const std::string& s = oss.str();
-    return std::vector<uint8_t>(s.begin(), s.end());
+template <typename T>
+static T read_le(const std::string& buf, size_t offset = 0) {
+    T value;
+    std::memcpy(&value, buf.data() + offset, sizeof(T));
+
+    if constexpr (std::endian::native == std::endian::big)
+        value = std::byteswap(value);
+
+    return value;
 }
 
-TEST(BinaryWriter, WritesU8) {
-    std::ostringstream oss(std::ios::binary);
+TEST(BinaryWriter, WriteU8) {
+    std::ostringstream oss;
     BinaryWriter w(oss);
 
-    w.write_u8(0xAB);
+    size_t written = w.write_u8(0xAB);
 
-    auto bytes = stream_bytes(oss);
-    ASSERT_EQ(bytes.size(), 1);
-    EXPECT_EQ(bytes[0], 0xAB);
+    auto data = oss.str();
+
+    ASSERT_EQ(written, 1);
+    ASSERT_EQ(static_cast<uint8_t>(data[0]), 0xAB);
 }
 
-TEST(BinaryWriter, WritesU32LittleEndian) {
-    std::ostringstream oss(std::ios::binary);
+TEST(BinaryWriter, WriteU16) {
+    std::ostringstream oss;
     BinaryWriter w(oss);
 
-    w.write_u32(0x11223344);
+    size_t written = w.write_u16(0x1234);
 
-    auto bytes = stream_bytes(oss);
-    ASSERT_EQ(bytes.size(), 4);
+    auto data = oss.str();
 
-    EXPECT_EQ(bytes[0], 0x44);
-    EXPECT_EQ(bytes[1], 0x33);
-    EXPECT_EQ(bytes[2], 0x22);
-    EXPECT_EQ(bytes[3], 0x11);
+    ASSERT_EQ(written, 2);
+
+    uint16_t val = read_le<uint16_t>(data);
+    EXPECT_EQ(val, 0x1234);
 }
 
-TEST(BinaryWriter, WritesU64LittleEndian) {
-    std::ostringstream oss(std::ios::binary);
+TEST(BinaryWriter, WriteU32) {
+    std::ostringstream oss;
     BinaryWriter w(oss);
 
-    w.write_u64(0x0102030405060708ULL);
+    size_t written = w.write_u32(0x11223344);
 
-    auto bytes = stream_bytes(oss);
-    ASSERT_EQ(bytes.size(), 8);
+    auto data = oss.str();
 
-    EXPECT_EQ(bytes[0], 0x08);
-    EXPECT_EQ(bytes[1], 0x07);
-    EXPECT_EQ(bytes[2], 0x06);
-    EXPECT_EQ(bytes[3], 0x05);
-    EXPECT_EQ(bytes[4], 0x04);
-    EXPECT_EQ(bytes[5], 0x03);
-    EXPECT_EQ(bytes[6], 0x02);
-    EXPECT_EQ(bytes[7], 0x01);
+    ASSERT_EQ(written, 4);
+
+    uint32_t val = read_le<uint32_t>(data);
+    EXPECT_EQ(val, 0x11223344);
 }
 
-TEST(BinaryWriter, WritesI64) {
-    std::ostringstream oss(std::ios::binary);
+TEST(BinaryWriter, WriteU64) {
+    std::ostringstream oss;
     BinaryWriter w(oss);
 
-    int64_t value = -1;
-    w.write_i64(value);
+    size_t written = w.write_u64(0x1122334455667788ULL);
 
-    auto bytes = stream_bytes(oss);
-    ASSERT_EQ(bytes.size(), 8);
+    auto data = oss.str();
 
-    for (auto b : bytes) {
-        EXPECT_EQ(b, 0xFF);
-    }
+    ASSERT_EQ(written, 8);
+
+    uint64_t val = read_le<uint64_t>(data);
+    EXPECT_EQ(val, 0x1122334455667788ULL);
 }
 
-TEST(BinaryWriter, WritesDouble) {
-    std::ostringstream oss(std::ios::binary);
+TEST(BinaryWriter, WriteI64) {
+    std::ostringstream oss;
     BinaryWriter w(oss);
 
-    double value = 3.141592653589793;
-    w.write_double(value);
+    int64_t input = -42;
+    size_t written = w.write_i64(input);
 
-    auto bytes = stream_bytes(oss);
-    ASSERT_EQ(bytes.size(), sizeof(double));
+    auto data = oss.str();
 
-    double out;
-    std::memcpy(&out, bytes.data(), sizeof(double));
+    ASSERT_EQ(written, 8);
 
-    EXPECT_EQ(out, value);
+    int64_t val = read_le<int64_t>(data);
+    EXPECT_EQ(val, input);
 }
 
-TEST(BinaryWriter, WritesBytes) {
-    std::ostringstream oss(std::ios::binary);
+TEST(BinaryWriter, WriteBytes) {
+    std::ostringstream oss;
     BinaryWriter w(oss);
 
-    const uint8_t data[] = {1, 2, 3, 4, 5};
-    w.write_bytes(data, sizeof(data));
+    const char buf[] = {1, 2, 3, 4, 5};
 
-    auto bytes = stream_bytes(oss);
+    size_t written = w.write_bytes(buf, sizeof(buf));
 
-    ASSERT_EQ(bytes.size(), 5);
-    EXPECT_EQ(bytes, (std::vector<uint8_t>{1,2,3,4,5}));
+    auto data = oss.str();
+
+    ASSERT_EQ(written, 5);
+    EXPECT_EQ(data.size(), 5);
+    EXPECT_EQ(std::memcmp(data.data(), buf, 5), 0);
 }
 
-TEST(BinaryWriter, WritesString) {
-    std::ostringstream oss(std::ios::binary);
+TEST(BinaryWriter, WriteString) {
+    std::ostringstream oss;
     BinaryWriter w(oss);
 
     std::string str = "hello";
-    w.write_string(str);
 
-    auto bytes = stream_bytes(oss);
+    size_t written = w.write_string(str);
 
-    ASSERT_EQ(bytes.size(), 9);
+    auto data = oss.str();
 
-    uint32_t len;
-    std::memcpy(&len, bytes.data(), sizeof(uint32_t));
-    EXPECT_EQ(len, 5);
+    ASSERT_EQ(written, 2 + str.size());
 
-    std::string decoded(bytes.begin() + 4, bytes.end());
-    EXPECT_EQ(decoded, "hello");
+    uint16_t len = read_le<uint16_t>(data);
+    EXPECT_EQ(len, str.size());
+
+    EXPECT_EQ(std::string(data.begin() + 2, data.end()), str);
 }
 
-TEST(BinaryWriter, WritesPOD) {
-    struct Test {
-        int32_t a;
-        uint16_t b;
-    };
-
-    std::ostringstream oss(std::ios::binary);
+TEST(BinaryWriter, WritePodStruct) {
+    std::ostringstream oss;
     BinaryWriter w(oss);
 
-    Test t{0x11223344, 0x5566};
-    w.write_pod(t);
+    struct Pod {
+        uint32_t a;
+        uint16_t b;
+        uint8_t c;
+    } input{0xAABBCCDD, 0xEEFF, 0x11};
 
-    auto bytes = stream_bytes(oss);
+    size_t written = w.write_pod(input);
 
-    ASSERT_EQ(bytes.size(), sizeof(Test));
+    auto data = oss.str();
 
-    Test out;
-    std::memcpy(&out, bytes.data(), sizeof(Test));
+    ASSERT_EQ(written, sizeof(Pod));
 
-    EXPECT_EQ(out.a, t.a);
-    EXPECT_EQ(out.b, t.b);
+    Pod out;
+    std::memcpy(&out, data.data(), sizeof(Pod));
+
+    EXPECT_EQ(out.a, input.a);
+    EXPECT_EQ(out.b, input.b);
+    EXPECT_EQ(out.c, input.c);
+}
+
+TEST(BinaryWriter, WriteDouble) {
+    std::ostringstream oss;
+    BinaryWriter w(oss);
+
+    double input = 3.141592653589793;
+    size_t written = w.write_double(input);
+
+    auto data = oss.str();
+
+    ASSERT_EQ(written, sizeof(double));
+
+    double out;
+    std::memcpy(&out, data.data(), sizeof(double));
+
+    EXPECT_EQ(out, input);
 }
