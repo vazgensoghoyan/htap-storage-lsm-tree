@@ -1,14 +1,14 @@
 #pragma once // lsmtree/mem/imm_memtable.hpp
 
-#include <map>
-#include <optional>
-
 #include "storage/api/types.hpp"
 
 namespace htap::lsmtree {
 
-// считаем, что на вход всегда сортированные данные приходят (по ключу)
-
+// создается из MemTable::to_sorted_immutable, который вызывается в MemoryLayer
+// этим гарантируем отсортированность данных
+// строго говоря, этот класс сам ничего не гарантирует, но позже
+// когда данные идут в SSTableBuilder, он уже проверяет отсортированность
+// поступаемых данных по ключу
 class ImmutableMemTable {
 public:
     explicit ImmutableMemTable(std::vector<storage::Row>&& data);

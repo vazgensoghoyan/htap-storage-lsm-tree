@@ -17,7 +17,8 @@ public:
 
     size_t size() const;
 
-    std::unique_ptr<ImmutableMemTable> freeze();
+    // гарантирует отсортированность данных в ImmMemTable
+    std::unique_ptr<ImmutableMemTable> to_sorted_immutable();
 
 private:
     std::map<storage::Key, storage::Row> data_;

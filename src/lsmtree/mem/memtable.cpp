@@ -15,7 +15,7 @@ size_t MemTable::size() const {
     return data_.size();
 }
 
-std::unique_ptr<ImmutableMemTable> MemTable::freeze() {
+std::unique_ptr<ImmutableMemTable> MemTable::to_sorted_immutable() {
     std::vector<Row> out;
     out.reserve(data_.size());
 

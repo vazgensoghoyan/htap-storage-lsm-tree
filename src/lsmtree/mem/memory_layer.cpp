@@ -14,7 +14,7 @@ void MemoryLayer::insert(const Row& row) {
 }
 
 void MemoryLayer::force_freeze() {
-    auto imm = active_->freeze(); 
+    auto imm = active_->to_sorted_immutable(); 
     immutables_.push_back(std::move(imm));
 
     size_t size = immutables_.back()->size();
