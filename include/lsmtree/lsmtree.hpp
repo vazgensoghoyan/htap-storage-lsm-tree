@@ -23,9 +23,7 @@ public:
     const storage::Schema& schema() const noexcept;
 
 private:
-    void flush_memtable_if_needed();
-    void force_flush();
-
+    void flush_memtable();
     std::string build_sst_path(uint64_t sst_id) const;
 
 private:

@@ -9,3 +9,7 @@ ImmutableMemTable::ImmutableMemTable(std::vector<Row>&& data) : data_(std::move(
 size_t ImmutableMemTable::size() const {
     return data_.size();
 }
+
+const std::vector<Row>& ImmutableMemTable::data() const {
+    return data_;
+}
