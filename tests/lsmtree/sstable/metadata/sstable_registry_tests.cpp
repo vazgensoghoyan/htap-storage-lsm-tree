@@ -1,31 +1,49 @@
 #include <gtest/gtest.h>
 
 #include "lsmtree/sstable/metadata/sstable_registry.hpp"
+#include "lsmtree/sstable/metadata/sstable_info.hpp"
+
+using namespace htap::lsmtree;
+using namespace htap::storage;
+
+namespace {
+
+// ===== Test factory =====
+
+SSTableInfo make_sstable_info(
+    uint64_t id,
+    std::string path,
+    uint32_t level,
+    Key min_key,
+    Key max_key,
+    uint64_t file_size_bytes = 100,
+    uint32_t num_blocks = 1,
+    SSTLayout layout = SSTLayout::ROW,
+    uint64_t meta_offset = 0
+) {
+    return SSTableInfo{
+        .id = id,
+        .path = std::move(path),
+        .level = level,
+        .min_key = min_key,
+        .max_key = max_key,
+        .file_size_bytes = file_size_bytes,
+        .meta_offset = meta_offset,
+        .num_blocks = num_blocks,
+        .layout = layout
+    };
+}
+
+} // namespace
+
+
+// ===================== TESTS =====================
 
 TEST(SSTableRegistryTest, AddCreatesLevels) {
-    htap::lsmtree::SSTableRegistry reg;
+    SSTableRegistry reg;
 
-    htap::lsmtree::SSTableInfo sst1{
-        .id = 1,
-        .path = "a.sst",
-        .level = 0,
-        .min_key = 1,
-        .max_key = 10,
-        .file_size_bytes = 100,
-        .num_blocks = 1,
-        .layout = htap::lsmtree::SSTLayout::ROW
-    };
-
-    htap::lsmtree::SSTableInfo sst2{
-        .id = 2,
-        .path = "b.sst",
-        .level = 2,
-        .min_key = 20,
-        .max_key = 30,
-        .file_size_bytes = 200,
-        .num_blocks = 2,
-        .layout = htap::lsmtree::SSTLayout::ROW
-    };
+    auto sst1 = make_sstable_info(1, "a.sst", 0, 1, 10);
+    auto sst2 = make_sstable_info(2, "b.sst", 2, 20, 30, 200, 2);
 
     reg.add(sst1);
     reg.add(sst2);
@@ -37,21 +55,11 @@ TEST(SSTableRegistryTest, AddCreatesLevels) {
     EXPECT_EQ(reg.sstable_count(2), 1);
 }
 
+
 TEST(SSTableRegistryTest, LevelAccessValidAndInvalid) {
-    htap::lsmtree::SSTableRegistry reg;
+    SSTableRegistry reg;
 
-    htap::lsmtree::SSTableInfo sst{
-        .id = 1,
-        .path = "a.sst",
-        .level = 0,
-        .min_key = 1,
-        .max_key = 10,
-        .file_size_bytes = 100,
-        .num_blocks = 1,
-        .layout = htap::lsmtree::SSTLayout::ROW
-    };
-
-    reg.add(sst);
+    reg.add(make_sstable_info(1, "a.sst", 0, 1, 10));
 
     const auto& lvl0 = reg.sstables_at_level(0);
     EXPECT_EQ(lvl0.size(), 1);
@@ -59,49 +67,23 @@ TEST(SSTableRegistryTest, LevelAccessValidAndInvalid) {
     EXPECT_THROW(reg.sstables_at_level(10), std::out_of_range);
 }
 
+
 TEST(SSTableRegistryTest, OverlappingBasic) {
-    htap::lsmtree::SSTableRegistry reg;
+    SSTableRegistry reg;
 
-    reg.add({
-        .id = 1,
-        .path = "a.sst",
-        .level = 0,
-        .min_key = 0,
-        .max_key = 10,
-        .file_size_bytes = 100,
-        .num_blocks = 1,
-        .layout = htap::lsmtree::SSTLayout::ROW
-    });
-
-    reg.add({
-        .id = 2,
-        .path = "b.sst",
-        .level = 0,
-        .min_key = 20,
-        .max_key = 30,
-        .file_size_bytes = 100,
-        .num_blocks = 1,
-        .layout = htap::lsmtree::SSTLayout::ROW
-    });
+    reg.add(make_sstable_info(1, "a.sst", 0, 0, 10));
+    reg.add(make_sstable_info(2, "b.sst", 0, 20, 30));
 
     auto res = reg.overlapping(0, 5, 25);
 
     EXPECT_EQ(res.size(), 2);
 }
 
-TEST(SSTableRegistryTest, OverlappingEdgeCases) {
-    htap::lsmtree::SSTableRegistry reg;
 
-    reg.add({
-        .id = 1,
-        .path = "a.sst",
-        .level = 0,
-        .min_key = 10,
-        .max_key = 20,
-        .file_size_bytes = 100,
-        .num_blocks = 1,
-        .layout = htap::lsmtree::SSTLayout::ROW
-    });
+TEST(SSTableRegistryTest, OverlappingEdgeCases) {
+    SSTableRegistry reg;
+
+    reg.add(make_sstable_info(1, "a.sst", 0, 10, 20));
 
     auto r1 = reg.overlapping(0, 0, 5);
     EXPECT_TRUE(r1.empty());
@@ -116,30 +98,12 @@ TEST(SSTableRegistryTest, OverlappingEdgeCases) {
     EXPECT_EQ(r4.size(), 1);
 }
 
+
 TEST(SSTableRegistryTest, RemoveById) {
-    htap::lsmtree::SSTableRegistry reg;
+    SSTableRegistry reg;
 
-    reg.add({
-        .id = 1,
-        .path = "a.sst",
-        .level = 0,
-        .min_key = 1,
-        .max_key = 10,
-        .file_size_bytes = 100,
-        .num_blocks = 1,
-        .layout = htap::lsmtree::SSTLayout::ROW
-    });
-
-    reg.add({
-        .id = 2,
-        .path = "b.sst",
-        .level = 0,
-        .min_key = 20,
-        .max_key = 30,
-        .file_size_bytes = 100,
-        .num_blocks = 1,
-        .layout = htap::lsmtree::SSTLayout::ROW
-    });
+    reg.add(make_sstable_info(1, "a.sst", 0, 1, 10));
+    reg.add(make_sstable_info(2, "b.sst", 0, 20, 30));
 
     EXPECT_EQ(reg.sstable_count(0), 2);
 
@@ -152,8 +116,9 @@ TEST(SSTableRegistryTest, RemoveById) {
     EXPECT_EQ(res[0].id, 2);
 }
 
+
 TEST(SSTableRegistryTest, EmptyRegistry) {
-    htap::lsmtree::SSTableRegistry reg;
+    SSTableRegistry reg;
 
     EXPECT_EQ(reg.level_count(), 0);
     EXPECT_EQ(reg.sstable_count(0), 0);

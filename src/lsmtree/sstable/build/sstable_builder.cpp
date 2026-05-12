@@ -147,7 +147,6 @@ SSTableBuildResult SSTableBuilder::finish() {
     SSTableBuildResult result {
         .min_key = footer.min_key,
         .max_key = footer.max_key,
-        .file_size_bytes = 0, // TODO !!!
         .meta_offset = footer.meta_offset,
         .num_blocks = footer.num_blocks
     };

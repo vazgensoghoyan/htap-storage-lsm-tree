@@ -5,7 +5,7 @@ using namespace htap::lsmtree;
 using namespace htap::storage;
 
 void MemTable::insert(const Row& row) {
-    Key key = std::get<Key>(row[KEY_COLUMN_INDEX].value());
+    Key key = std::get<Key>(*row[KEY_COLUMN_INDEX]);
     data_[key] = row;
 
     LOG_DEBUG("MemTable insert key={}", key);
