@@ -1,4 +1,4 @@
-#pragma once // lsmtree/mem/memtable_realizations/memtable.hpp
+#pragma once // lsmtree/mem/memtable_realizations/map_memtable.hpp
 
 #include <map>
 #include <memory>
@@ -10,7 +10,7 @@
 
 namespace htap::lsmtree {
 
-class MapMemTable : public IMemTable {
+class MapMemTable final : public IMemTable {
 public:
     MapMemTable() = default;
 

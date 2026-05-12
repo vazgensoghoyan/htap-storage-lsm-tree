@@ -1,4 +1,4 @@
-#pragma once // lsmtree/mem/memtable.hpp
+#pragma once // lsmtree/mem/memtable_interface.hpp
 
 #include <memory>
 
