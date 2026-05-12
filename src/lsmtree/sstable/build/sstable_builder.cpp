@@ -1,4 +1,4 @@
-#include "lsmtree/sstable/sstable_builder.hpp"
+#include "lsmtree/sstable/build/sstable_builder.hpp"
 
 #include <limits>
 #include <stdexcept>
@@ -67,9 +67,9 @@ void SSTableBuilder::flush_block() {
         meta.size_bytes);
 }
 
-void SSTableBuilder::finish() {
+SSTableBuildResult SSTableBuilder::finish() {
     if (finished_)
-        return;
+        throw std::runtime_error("Already finished building SSTable");
 
     LOG_INFO("SSTableBuilder: finish start");
 
@@ -143,4 +143,14 @@ void SSTableBuilder::finish() {
     LOG_INFO("SSTableBuilder: finish done (total_bytes_written={})", file_offset_);
 
     finished_ = true;
+
+    SSTableBuildResult result {
+        .min_key = footer.min_key,
+        .max_key = footer.max_key,
+        .file_size_bytes = 0, // TODO !!!
+        .meta_offset = footer.meta_offset,
+        .num_blocks = footer.num_blocks
+    };
+
+    return result;
 }

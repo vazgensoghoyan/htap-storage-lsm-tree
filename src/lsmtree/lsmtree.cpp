@@ -6,7 +6,7 @@
 #include <format>
 
 #include "utils/logger.hpp"
-#include "lsmtree/sstable/sstable_builder.hpp"
+#include "lsmtree/sstable/build/sstable_builder.hpp"
 
 using namespace htap::lsmtree;
 using namespace htap::storage;
@@ -48,17 +48,23 @@ void LSMTree::flush_memtable() {
         builder.add(row);
     }
 
-    builder.finish();
+    SSTableBuildResult build_result = builder.finish();
+
+    // эти две переменные - захардкожено то, куда и в каком виде должно
+    // попадать первый sstable при flush-е imm_memtabl-а
+    uint32_t level = 0;
+    SSTLayout layout = SSTLayout::ROW;
 
     SSTableInfo info{
         .id = sst_id,
         .path = file_path,
-        .level = 0, // L0 for now
-        .min_key = std::get<Key>(imm->data().front()[KEY_COLUMN_INDEX].value()),
-        .max_key = std::get<Key>(imm->data().back()[KEY_COLUMN_INDEX].value()),
+        .level = level,
+        .min_key = build_result.min_key,
+        .max_key = build_result.max_key,
         .file_size_bytes = std::filesystem::file_size(file_path),
-        .num_blocks = 0, // можно расширить через builder stats
-        .layout = SSTLayout::ROW
+        .meta_offset = build_result.meta_offset,
+        .num_blocks = build_result.num_blocks,
+        .layout = layout
     };
 
     registry_.add(info);

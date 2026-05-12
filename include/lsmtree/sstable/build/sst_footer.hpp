@@ -1,4 +1,4 @@
-#pragma once // lsmtree/sstable/sst_footer.hpp
+#pragma once // lsmtree/sstable/build/sst_footer.hpp
 
 #include <cstdint>
 #include <cstddef>
@@ -16,8 +16,8 @@ struct SSTFooter {
     uint32_t num_blocks;
     uint64_t meta_offset;
 
-    uint64_t min_key;
-    uint64_t max_key;
+    storage::Key min_key;
+    storage::Key max_key;
 
     uint8_t layout_type; // ROW or COLUMN
 };

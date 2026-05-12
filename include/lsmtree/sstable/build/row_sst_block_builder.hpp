@@ -1,4 +1,4 @@
-#pragma once // lsmtree/sstable/row_sst_block_builder.hpp
+#pragma once // lsmtree/sstable/build/row_sst_block_builder.hpp
 
 #include <cstdint>
 

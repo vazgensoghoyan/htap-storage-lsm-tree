@@ -1,4 +1,4 @@
-#pragma once // lsmtree/sstable/sstable_builder.hpp
+#pragma once // lsmtree/sstable/build/sstable_builder.hpp
 
 #include <fstream>
 #include <vector>
@@ -7,12 +7,23 @@
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
 
-#include "lsmtree/sstable/row_sst_block_builder.hpp"
-#include "lsmtree/sstable/sst_footer.hpp"
+#include "lsmtree/sstable/build/row_sst_block_builder.hpp"
+#include "lsmtree/sstable/build/sst_footer.hpp"
 
 #include "utils/binary_writer.hpp"
 
 namespace htap::lsmtree {
+
+struct SSTableBuildResult {
+    storage::Key min_key;
+    storage::Key max_key;
+
+    uint64_t file_size_bytes;
+
+    uint64_t meta_offset;
+
+    uint32_t num_blocks;
+};
 
 class SSTableBuilder {
 public:
@@ -20,7 +31,7 @@ public:
 
     void add(const storage::Row& row);
 
-    void finish();
+    SSTableBuildResult finish();
 
 private:
     void flush_block();

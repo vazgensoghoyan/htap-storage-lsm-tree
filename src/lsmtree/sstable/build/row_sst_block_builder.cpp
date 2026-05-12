@@ -1,4 +1,4 @@
-#include "lsmtree/sstable/row_sst_block_builder.hpp"
+#include "lsmtree/sstable/build/row_sst_block_builder.hpp"
 
 #include <limits>
 #include <cstring>

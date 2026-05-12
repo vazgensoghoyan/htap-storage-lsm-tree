@@ -1,4 +1,4 @@
-#pragma once // lsmtree/sstable/column_sst_block_builder.hpp
+#pragma once // lsmtree/sstable/build/column_sst_block_builder.hpp
 
 #include <cstdint>
 #include <vector>

@@ -5,8 +5,8 @@
 #include <cstdint>
 #include <limits>
 
-#include "lsmtree/sstable/sstable_builder.hpp"
-#include "lsmtree/sstable/sst_footer.hpp"
+#include "lsmtree/sstable/build/sstable_builder.hpp"
+#include "lsmtree/sstable/build/sst_footer.hpp"
 #include "storage/model/schema_builder.hpp"
 
 using namespace htap::lsmtree;
