@@ -4,7 +4,8 @@
 using namespace htap::lsmtree;
 using namespace htap::storage;
 
-void MemTable::insert(Key key, const Row& row) {
+void MemTable::insert(const Row& row) {
+    Key key = std::get<Key>(*row[KEY_COLUMN_INDEX]);
     data_[key] = row;
 
     LOG_DEBUG("MemTable insert key={}", key);
@@ -14,7 +15,7 @@ size_t MemTable::size() const {
     return data_.size();
 }
 
-std::unique_ptr<ImmutableMemTable> MemTable::freeze() {
+std::unique_ptr<ImmutableMemTable> MemTable::to_sorted_immutable() {
     std::vector<Row> out;
     out.reserve(data_.size());
 

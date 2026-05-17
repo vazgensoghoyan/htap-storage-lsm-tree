@@ -13,11 +13,12 @@ class MemTable {
 public:
     MemTable() = default;
 
-    void insert(storage::Key key, const storage::Row& row);
+    void insert(const storage::Row& row);
 
     size_t size() const;
 
-    std::unique_ptr<ImmutableMemTable> freeze();
+    // гарантирует отсортированность данных в ImmMemTable
+    std::unique_ptr<ImmutableMemTable> to_sorted_immutable();
 
 private:
     std::map<storage::Key, storage::Row> data_;
