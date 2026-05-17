@@ -5,14 +5,22 @@
 #include <chrono>
 #include <string>
 #include <format>
+#include <iomanip>
 
 #define LOGGING_ENABLED
 
 #ifdef LOGGING_ENABLED
-    #define LOG_INFO(fmt, ...)  htap::utils::Logger::info(fmt, ##__VA_ARGS__)
-    #define LOG_WARN(fmt, ...)  htap::utils::Logger::warn(fmt, ##__VA_ARGS__)
-    #define LOG_DEBUG(fmt, ...) htap::utils::Logger::debug(fmt, ##__VA_ARGS__)
-    #define LOG_ERROR(fmt, ...) htap::utils::Logger::error(fmt, ##__VA_ARGS__)
+    #define LOG_INFO(fmt, ...) \
+        ::htap::utils::Logger::info(fmt __VA_OPT__(,) __VA_ARGS__)
+
+    #define LOG_WARN(fmt, ...) \
+        ::htap::utils::Logger::warn(fmt __VA_OPT__(,) __VA_ARGS__)
+
+    #define LOG_DEBUG(fmt, ...) \
+        ::htap::utils::Logger::debug(fmt __VA_OPT__(,) __VA_ARGS__)
+
+    #define LOG_ERROR(fmt, ...) \
+        ::htap::utils::Logger::error(fmt __VA_OPT__(,) __VA_ARGS__)
 #else
     #define LOG_INFO(fmt, ...)  ((void)0)
     #define LOG_WARN(fmt, ...)  ((void)0)
@@ -77,7 +85,7 @@ private:
         std::lock_guard<std::mutex> lock(m_mutex);
         std::cout << std::put_time(&tm, "%Y-%m-%d %H:%M:%S")
                   << " " << color << "[" << tag << "]\033[0m "
-                  << message << std::endl;
+                  << message << '\n';
     }
 };
 
