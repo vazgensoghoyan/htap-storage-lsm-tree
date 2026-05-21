@@ -31,4 +31,6 @@ ImmutableMemTable::Iterator ImmutableMemTable::lower_bound(storage::Key key) con
             return std::get<Key>(*row[KEY_COLUMN_INDEX]) < target;
         }
     );
+const std::vector<Row>& ImmutableMemTable::data() const {
+    return data_;
 }

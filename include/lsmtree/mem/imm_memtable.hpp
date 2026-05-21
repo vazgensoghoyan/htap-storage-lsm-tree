@@ -8,6 +8,11 @@
 
 namespace htap::lsmtree {
 
+// создается из MemTable::to_sorted_immutable, который вызывается в MemoryLayer
+// этим гарантируем отсортированность данных
+// строго говоря, этот класс сам ничего не гарантирует, но позже
+// когда данные идут в SSTableBuilder, он уже проверяет отсортированность
+// поступаемых данных по ключу
 class ImmutableMemTable {
 public:
     using Storage = std::vector<storage::Row>;
@@ -16,6 +21,7 @@ public:
     explicit ImmutableMemTable(std::vector<storage::Row>&& data);
 
     size_t size() const;
+    const std::vector<storage::Row>& data() const;
 
     Iterator begin() const;
     Iterator end() const;
