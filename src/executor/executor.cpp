@@ -1,6 +1,7 @@
 #include <stdexcept>
 #include <limits>
 #include <algorithm>
+#include <map>
 
 #include "executor/executor.hpp"
 
@@ -259,6 +260,25 @@ int CompareNullableResultValues(const NullableResultValue& left, const NullableR
 
     return CompareResultValues(*left, *right);
 }
+
+
+using GroupKey = std::vector<NullableResultValue>;
+
+struct GroupKeyLess {
+    bool operator()(const GroupKey& left, const GroupKey& right) const {
+        const std::size_t common_size = std::min(left.size(), right.size());
+
+        for (std::size_t i = 0; i < common_size; ++i) {
+            const int cmp = CompareNullableResultValues(left[i], right[i]);
+
+            if (cmp < 0) return true;
+
+            if (cmp > 0) return false;
+        }
+
+        return left.size() < right.size();
+    }
+};
 
 }
 
@@ -1080,9 +1100,15 @@ SelectResult Executor::ExecuteGroupedAggregateSelect(
     const std::vector<std::string>& column_names,
     const std::vector<std::size_t>& projection
 ) {
-    (void)statement;
-    (void)column_names;
+    if (!statement.schema) {
+        throw std::runtime_error("BoundSelectStatement schema is null");
+    }
+
+    SelectResult result;
+    result.column_names = column_names;
+
     (void)projection;
+
     throw std::runtime_error("ExecuteGroupedAggregateSelect is not implemented yet");
 }
 
