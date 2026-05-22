@@ -3,28 +3,28 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace htap::storage::cursor {
+
 namespace {
 
 class TempFile {
 public:
     explicit TempFile(std::string name)
         : path_(std::filesystem::temp_directory_path() / std::move(name)) {
-        std::filesystem::remove(path_);
+        cleanup();
     }
 
     ~TempFile() {
-        std::error_code ec;
-        std::filesystem::remove(path_, ec);
+        cleanup();
     }
 
     const std::filesystem::path& path() const {
@@ -32,12 +32,39 @@ public:
     }
 
     void write(const std::vector<char>& data) const {
-        std::ofstream out(path_, std::ios::binary);
+        std::ofstream out(data_path(), std::ios::binary);
         out.write(data.data(), static_cast<std::streamsize>(data.size()));
     }
 
     void touch() const {
-        std::ofstream out(path_, std::ios::binary);
+        std::ofstream out(data_path(), std::ios::binary);
+    }
+
+private:
+    std::filesystem::path data_path() const {
+        auto path = path_;
+        path.replace_extension(".sst");
+        return path;
+    }
+
+    std::filesystem::path index_path() const {
+        auto path = path_;
+        path.replace_extension(".idx");
+        return path;
+    }
+
+    std::filesystem::path metadata_path() const {
+        auto path = path_;
+        path.replace_extension(".meta");
+        return path;
+    }
+
+    void cleanup() const {
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+        std::filesystem::remove(data_path(), ec);
+        std::filesystem::remove(index_path(), ec);
+        std::filesystem::remove(metadata_path(), ec);
     }
 
 private:
@@ -77,6 +104,7 @@ read::sstable::ColumnBlockMeta make_meta(
     meta.values_count = values_count;
     meta.block_id = block_id;
     meta.column_idx = column_idx;
+
     return meta;
 }
 
@@ -100,7 +128,7 @@ std::vector<char> make_int64_column_block(
 
     for (std::size_t i = 0; i < values.size(); ++i) {
         if (!values[i].has_value()) {
-            bitmap[i / 8] |= static_cast<std::uint8_t>(std::uint8_t{1} << (i % 8));
+            bitmap[i / 8] |= static_cast<std::uint8_t>(1u << (i % 8));
         }
     }
 
@@ -125,7 +153,7 @@ std::vector<char> make_double_column_block(
 
     for (std::size_t i = 0; i < values.size(); ++i) {
         if (!values[i].has_value()) {
-            bitmap[i / 8] |= static_cast<std::uint8_t>(std::uint8_t{1} << (i % 8));
+            bitmap[i / 8] |= static_cast<std::uint8_t>(1u << (i % 8));
         }
     }
 
@@ -150,7 +178,7 @@ std::vector<char> make_string_column_block(
 
     for (std::size_t i = 0; i < values.size(); ++i) {
         if (!values[i].has_value()) {
-            bitmap[i / 8] |= static_cast<std::uint8_t>(std::uint8_t{1} << (i % 8));
+            bitmap[i / 8] |= static_cast<std::uint8_t>(1u << (i % 8));
         }
     }
 
@@ -195,10 +223,10 @@ struct ColumnFileBuilder {
 
 std::vector<ValueType> test_schema() {
     return {
-        ValueType::INT64,   // 0 key
-        ValueType::INT64,   // 1 age
-        ValueType::DOUBLE,  // 2 score
-        ValueType::STRING   // 3 name
+        ValueType::INT64,  // 0 key
+        ValueType::INT64,  // 1 age
+        ValueType::DOUBLE, // 2 score
+        ValueType::STRING  // 3 name
     };
 }
 
@@ -209,7 +237,7 @@ read::sstable::KeyRange range(std::optional<Key> from, std::optional<Key> to) {
     return result;
 }
 
-} 
+} // namespace
 
 TEST(SSTableColumnCursorTest, EmptyBlocksProduceInvalidCursor) {
     TempFile file("htap_sstable_column_cursor_empty_blocks.bin");
@@ -230,42 +258,10 @@ TEST(SSTableColumnCursorTest, ReadsProjectedColumnsAndNullsInRange) {
     TempFile file("htap_sstable_column_cursor_projected_columns.bin");
 
     ColumnFileBuilder builder;
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/0,
-        /*min_key=*/1,
-        /*max_key=*/4,
-        /*values_count=*/3,
-        make_key_block({1, 2, 3})
-    );
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/1,
-        /*min_key=*/1,
-        /*max_key=*/4,
-        /*values_count=*/3,
-        make_int64_column_block({10, std::nullopt, 30})
-    );
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/2,
-        /*min_key=*/1,
-        /*max_key=*/4,
-        /*values_count=*/3,
-        make_double_column_block({1.5, 2.5, std::nullopt})
-    );
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/3,
-        /*min_key=*/1,
-        /*max_key=*/4,
-        /*values_count=*/3,
-        make_string_column_block({"a", "bb", "ccc"})
-    );
+    builder.add_block(0, 0, 1, 4, 3, make_key_block({1, 2, 3}));
+    builder.add_block(0, 1, 1, 4, 3, make_int64_column_block({10, std::nullopt, 30}));
+    builder.add_block(0, 2, 1, 4, 3, make_double_column_block({1.5, 2.5, std::nullopt}));
+    builder.add_block(0, 3, 1, 4, 3, make_string_column_block({"a", "bb", "ccc"}));
 
     file.write(builder.file_data);
 
@@ -302,7 +298,6 @@ TEST(SSTableColumnCursorTest, ReadsProjectedColumnsAndNullsInRange) {
     EXPECT_EQ(std::get<std::string>(*cursor.value(3)), "ccc");
 
     cursor.next();
-
     EXPECT_FALSE(cursor.valid());
 }
 
@@ -310,24 +305,8 @@ TEST(SSTableColumnCursorTest, RespectsUpperExclusiveRangeBoundary) {
     TempFile file("htap_sstable_column_cursor_upper_exclusive.bin");
 
     ColumnFileBuilder builder;
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/0,
-        /*min_key=*/1,
-        /*max_key=*/5,
-        /*values_count=*/4,
-        make_key_block({1, 2, 3, 4})
-    );
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/1,
-        /*min_key=*/1,
-        /*max_key=*/5,
-        /*values_count=*/4,
-        make_int64_column_block({10, 20, 30, 40})
-    );
+    builder.add_block(0, 0, 1, 5, 4, make_key_block({1, 2, 3, 4}));
+    builder.add_block(0, 1, 1, 5, 4, make_int64_column_block({10, 20, 30, 40}));
 
     file.write(builder.file_data);
 
@@ -348,7 +327,6 @@ TEST(SSTableColumnCursorTest, RespectsUpperExclusiveRangeBoundary) {
     EXPECT_EQ(cursor.key(), 3);
 
     cursor.next();
-
     EXPECT_FALSE(cursor.valid());
 }
 
@@ -356,24 +334,8 @@ TEST(SSTableColumnCursorTest, SupportsOpenEndedRanges) {
     TempFile file("htap_sstable_column_cursor_open_ended_ranges.bin");
 
     ColumnFileBuilder builder;
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/0,
-        /*min_key=*/1,
-        /*max_key=*/5,
-        /*values_count=*/4,
-        make_key_block({1, 2, 3, 4})
-    );
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/1,
-        /*min_key=*/1,
-        /*max_key=*/5,
-        /*values_count=*/4,
-        make_int64_column_block({10, 20, 30, 40})
-    );
+    builder.add_block(0, 0, 1, 5, 4, make_key_block({1, 2, 3, 4}));
+    builder.add_block(0, 1, 1, 5, 4, make_int64_column_block({10, 20, 30, 40}));
 
     file.write(builder.file_data);
 
@@ -395,7 +357,6 @@ TEST(SSTableColumnCursorTest, SupportsOpenEndedRanges) {
         EXPECT_EQ(cursor.key(), 2);
 
         cursor.next();
-
         EXPECT_FALSE(cursor.valid());
     }
 
@@ -417,7 +378,6 @@ TEST(SSTableColumnCursorTest, SupportsOpenEndedRanges) {
         EXPECT_EQ(cursor.key(), 4);
 
         cursor.next();
-
         EXPECT_FALSE(cursor.valid());
     }
 }
@@ -426,42 +386,10 @@ TEST(SSTableColumnCursorTest, SupportsMultipleLogicalBlocks) {
     TempFile file("htap_sstable_column_cursor_multiple_logical_blocks.bin");
 
     ColumnFileBuilder builder;
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/0,
-        /*min_key=*/1,
-        /*max_key=*/3,
-        /*values_count=*/2,
-        make_key_block({1, 2})
-    );
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/1,
-        /*min_key=*/1,
-        /*max_key=*/3,
-        /*values_count=*/2,
-        make_int64_column_block({10, 20})
-    );
-
-    builder.add_block(
-        /*block_id=*/1,
-        /*column_idx=*/0,
-        /*min_key=*/3,
-        /*max_key=*/5,
-        /*values_count=*/2,
-        make_key_block({3, 4})
-    );
-
-    builder.add_block(
-        /*block_id=*/1,
-        /*column_idx=*/1,
-        /*min_key=*/3,
-        /*max_key=*/5,
-        /*values_count=*/2,
-        make_int64_column_block({30, 40})
-    );
+    builder.add_block(0, 0, 1, 3, 2, make_key_block({1, 2}));
+    builder.add_block(0, 1, 1, 3, 2, make_int64_column_block({10, 20}));
+    builder.add_block(1, 0, 3, 5, 2, make_key_block({3, 4}));
+    builder.add_block(1, 1, 3, 5, 2, make_int64_column_block({30, 40}));
 
     file.write(builder.file_data);
 
@@ -496,7 +424,6 @@ TEST(SSTableColumnCursorTest, SupportsMultipleLogicalBlocks) {
     EXPECT_EQ(std::get<std::int64_t>(*cursor.value(1)), 40);
 
     cursor.next();
-
     EXPECT_FALSE(cursor.valid());
 }
 
@@ -504,42 +431,10 @@ TEST(SSTableColumnCursorTest, SkipsLogicalBlocksWithoutMatchingRows) {
     TempFile file("htap_sstable_column_cursor_skips_non_matching_blocks.bin");
 
     ColumnFileBuilder builder;
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/0,
-        /*min_key=*/1,
-        /*max_key=*/3,
-        /*values_count=*/2,
-        make_key_block({1, 2})
-    );
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/1,
-        /*min_key=*/1,
-        /*max_key=*/3,
-        /*values_count=*/2,
-        make_int64_column_block({10, 20})
-    );
-
-    builder.add_block(
-        /*block_id=*/1,
-        /*column_idx=*/0,
-        /*min_key=*/3,
-        /*max_key=*/5,
-        /*values_count=*/2,
-        make_key_block({3, 4})
-    );
-
-    builder.add_block(
-        /*block_id=*/1,
-        /*column_idx=*/1,
-        /*min_key=*/3,
-        /*max_key=*/5,
-        /*values_count=*/2,
-        make_int64_column_block({30, 40})
-    );
+    builder.add_block(0, 0, 1, 3, 2, make_key_block({1, 2}));
+    builder.add_block(0, 1, 1, 3, 2, make_int64_column_block({10, 20}));
+    builder.add_block(1, 0, 3, 5, 2, make_key_block({3, 4}));
+    builder.add_block(1, 1, 3, 5, 2, make_int64_column_block({30, 40}));
 
     file.write(builder.file_data);
 
@@ -562,7 +457,6 @@ TEST(SSTableColumnCursorTest, SkipsLogicalBlocksWithoutMatchingRows) {
     EXPECT_EQ(std::get<std::int64_t>(*cursor.value(1)), 40);
 
     cursor.next();
-
     EXPECT_FALSE(cursor.valid());
 }
 
@@ -570,26 +464,10 @@ TEST(SSTableColumnCursorTest, DoesNotRequireUnprojectedColumnMetadata) {
     TempFile file("htap_sstable_column_cursor_missing_unprojected_metadata.bin");
 
     ColumnFileBuilder builder;
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/0,
-        /*min_key=*/1,
-        /*max_key=*/4,
-        /*values_count=*/3,
-        make_key_block({1, 2, 3})
-    );
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/3,
-        /*min_key=*/1,
-        /*max_key=*/4,
-        /*values_count=*/3,
-        make_string_column_block({"a", "bb", "ccc"})
-    );
-
+    builder.add_block(0, 0, 1, 4, 3, make_key_block({1, 2, 3}));
+    builder.add_block(0, 3, 1, 4, 3, make_string_column_block({"a", "bb", "ccc"}));
     // column 1 and column 2 metadata are intentionally absent.
+
     file.write(builder.file_data);
 
     SSTableColumnCursor cursor(
@@ -617,7 +495,6 @@ TEST(SSTableColumnCursorTest, DoesNotRequireUnprojectedColumnMetadata) {
     EXPECT_EQ(std::get<std::string>(*cursor.value(3)), "ccc");
 
     cursor.next();
-
     EXPECT_FALSE(cursor.valid());
 }
 
@@ -625,24 +502,8 @@ TEST(SSTableColumnCursorTest, ThrowsWhenAccessingColumnThatWasNotLoaded) {
     TempFile file("htap_sstable_column_cursor_unloaded_column.bin");
 
     ColumnFileBuilder builder;
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/0,
-        /*min_key=*/1,
-        /*max_key=*/3,
-        /*values_count=*/2,
-        make_key_block({1, 2})
-    );
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/1,
-        /*min_key=*/1,
-        /*max_key=*/3,
-        /*values_count=*/2,
-        make_int64_column_block({10, 20})
-    );
+    builder.add_block(0, 0, 1, 3, 2, make_key_block({1, 2}));
+    builder.add_block(0, 1, 1, 3, 2, make_int64_column_block({10, 20}));
 
     file.write(builder.file_data);
 
@@ -666,15 +527,7 @@ TEST(SSTableColumnCursorTest, ThrowsOnInvalidColumnIndex) {
     TempFile file("htap_sstable_column_cursor_invalid_column_index.bin");
 
     ColumnFileBuilder builder;
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/0,
-        /*min_key=*/1,
-        /*max_key=*/2,
-        /*values_count=*/1,
-        make_key_block({1})
-    );
+    builder.add_block(0, 0, 1, 2, 1, make_key_block({1}));
 
     file.write(builder.file_data);
 
@@ -738,7 +591,7 @@ TEST(SSTableColumnCursorTest, ThrowsOnTruncatedKeyBlock) {
     TempFile file("htap_sstable_column_cursor_truncated_key_block.bin");
 
     std::vector<char> file_data;
-    append_pod<std::int32_t>(file_data, 42); // less than sizeof(Key)
+    append_pod(file_data, 42); // less than sizeof(Key)
 
     std::vector<read::sstable::ColumnBlockMeta> blocks = {
         make_meta(
@@ -770,28 +623,13 @@ TEST(SSTableColumnCursorTest, ThrowsOnTruncatedValueBlock) {
     TempFile file("htap_sstable_column_cursor_truncated_value_block.bin");
 
     ColumnFileBuilder builder;
-
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/0,
-        /*min_key=*/1,
-        /*max_key=*/2,
-        /*values_count=*/1,
-        make_key_block({1})
-    );
+    builder.add_block(0, 0, 1, 2, 1, make_key_block({1}));
 
     // values_count = 1, bitmap says value is present, but no int64 bytes follow.
     std::vector<char> broken_value_block;
     broken_value_block.push_back(0);
 
-    builder.add_block(
-        /*block_id=*/0,
-        /*column_idx=*/1,
-        /*min_key=*/1,
-        /*max_key=*/2,
-        /*values_count=*/1,
-        broken_value_block
-    );
+    builder.add_block(0, 1, 1, 2, 1, broken_value_block);
 
     file.write(builder.file_data);
 

@@ -3,28 +3,28 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace htap::storage::cursor {
+
 namespace {
 
 class TempFile {
 public:
     explicit TempFile(std::string name)
         : path_(std::filesystem::temp_directory_path() / std::move(name)) {
-        std::filesystem::remove(path_);
+        cleanup();
     }
 
     ~TempFile() {
-        std::error_code ec;
-        std::filesystem::remove(path_, ec);
+        cleanup();
     }
 
     const std::filesystem::path& path() const {
@@ -32,12 +32,39 @@ public:
     }
 
     void write(const std::vector<char>& data) const {
-        std::ofstream out(path_, std::ios::binary);
+        std::ofstream out(data_path(), std::ios::binary);
         out.write(data.data(), static_cast<std::streamsize>(data.size()));
     }
 
     void touch() const {
-        std::ofstream out(path_, std::ios::binary);
+        std::ofstream out(data_path(), std::ios::binary);
+    }
+
+private:
+    std::filesystem::path data_path() const {
+        auto path = path_;
+        path.replace_extension(".sst");
+        return path;
+    }
+
+    std::filesystem::path index_path() const {
+        auto path = path_;
+        path.replace_extension(".idx");
+        return path;
+    }
+
+    std::filesystem::path metadata_path() const {
+        auto path = path_;
+        path.replace_extension(".meta");
+        return path;
+    }
+
+    void cleanup() const {
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+        std::filesystem::remove(data_path(), ec);
+        std::filesystem::remove(index_path(), ec);
+        std::filesystem::remove(metadata_path(), ec);
     }
 
 private:
@@ -75,15 +102,16 @@ read::sstable::RowBlockMeta make_meta(
     meta.size = size;
     meta.row_count = row_count;
     meta.block_id = block_id;
+
     return meta;
 }
 
 std::vector<ValueType> test_schema() {
     return {
-        ValueType::INT64,   // 0 key
-        ValueType::INT64,   // 1 age
-        ValueType::DOUBLE,  // 2 score
-        ValueType::STRING   // 3 name
+        ValueType::INT64,  // 0 key
+        ValueType::INT64,  // 1 age
+        ValueType::DOUBLE, // 2 score
+        ValueType::STRING  // 3 name
     };
 }
 
@@ -114,15 +142,15 @@ std::vector<char> make_row_block(const std::vector<TestRow>& rows) {
         std::uint8_t bitmap = 0;
 
         if (!row.age.has_value()) {
-            bitmap |= static_cast<std::uint8_t>(std::uint8_t{1} << 0);
+            bitmap |= static_cast<std::uint8_t>(1u << 0);
         }
 
         if (!row.score.has_value()) {
-            bitmap |= static_cast<std::uint8_t>(std::uint8_t{1} << 1);
+            bitmap |= static_cast<std::uint8_t>(1u << 1);
         }
 
         if (!row.name.has_value()) {
-            bitmap |= static_cast<std::uint8_t>(std::uint8_t{1} << 2);
+            bitmap |= static_cast<std::uint8_t>(1u << 2);
         }
 
         append_pod(data, bitmap);
@@ -169,7 +197,7 @@ struct RowFileBuilder {
     }
 };
 
-} 
+} // namespace
 
 TEST(SSTableRowCursorTest, EmptyBlocksProduceInvalidCursor) {
     TempFile file("htap_sstable_row_cursor_empty_blocks.bin");
@@ -190,7 +218,6 @@ TEST(SSTableRowCursorTest, ReadsRowsAndNullsInRange) {
     TempFile file("htap_sstable_row_cursor_reads_rows_and_nulls.bin");
 
     RowFileBuilder builder;
-
     builder.add_block(
         /*min_key=*/1,
         /*max_key=*/4,
@@ -237,7 +264,6 @@ TEST(SSTableRowCursorTest, ReadsRowsAndNullsInRange) {
     EXPECT_EQ(std::get<std::string>(*cursor.value(3)), "ccc");
 
     cursor.next();
-
     EXPECT_FALSE(cursor.valid());
 }
 
@@ -245,7 +271,6 @@ TEST(SSTableRowCursorTest, RespectsUpperExclusiveRangeBoundary) {
     TempFile file("htap_sstable_row_cursor_upper_exclusive.bin");
 
     RowFileBuilder builder;
-
     builder.add_block(
         /*min_key=*/1,
         /*max_key=*/5,
@@ -277,7 +302,6 @@ TEST(SSTableRowCursorTest, RespectsUpperExclusiveRangeBoundary) {
     EXPECT_EQ(cursor.key(), 3);
 
     cursor.next();
-
     EXPECT_FALSE(cursor.valid());
 }
 
@@ -285,7 +309,6 @@ TEST(SSTableRowCursorTest, SupportsOpenEndedRanges) {
     TempFile file("htap_sstable_row_cursor_open_ended_ranges.bin");
 
     RowFileBuilder builder;
-
     builder.add_block(
         /*min_key=*/1,
         /*max_key=*/5,
@@ -318,7 +341,6 @@ TEST(SSTableRowCursorTest, SupportsOpenEndedRanges) {
         EXPECT_EQ(cursor.key(), 2);
 
         cursor.next();
-
         EXPECT_FALSE(cursor.valid());
     }
 
@@ -340,7 +362,6 @@ TEST(SSTableRowCursorTest, SupportsOpenEndedRanges) {
         EXPECT_EQ(cursor.key(), 4);
 
         cursor.next();
-
         EXPECT_FALSE(cursor.valid());
     }
 }
@@ -349,7 +370,6 @@ TEST(SSTableRowCursorTest, SupportsMultipleBlocks) {
     TempFile file("htap_sstable_row_cursor_multiple_blocks.bin");
 
     RowFileBuilder builder;
-
     builder.add_block(
         /*min_key=*/1,
         /*max_key=*/3,
@@ -399,7 +419,6 @@ TEST(SSTableRowCursorTest, SupportsMultipleBlocks) {
     EXPECT_EQ(cursor.key(), 4);
 
     cursor.next();
-
     EXPECT_FALSE(cursor.valid());
 }
 
@@ -407,7 +426,6 @@ TEST(SSTableRowCursorTest, SkipsBlocksWithoutMatchingRows) {
     TempFile file("htap_sstable_row_cursor_skips_non_matching_blocks.bin");
 
     RowFileBuilder builder;
-
     builder.add_block(
         /*min_key=*/1,
         /*max_key=*/3,
@@ -449,7 +467,6 @@ TEST(SSTableRowCursorTest, SkipsBlocksWithoutMatchingRows) {
     EXPECT_EQ(std::get<std::int64_t>(*cursor.value(1)), 40);
 
     cursor.next();
-
     EXPECT_FALSE(cursor.valid());
 }
 
@@ -457,7 +474,6 @@ TEST(SSTableRowCursorTest, ReturnsInvalidWhenRangeMatchesNoRows) {
     TempFile file("htap_sstable_row_cursor_range_matches_no_rows.bin");
 
     RowFileBuilder builder;
-
     builder.add_block(
         /*min_key=*/1,
         /*max_key=*/4,
@@ -486,7 +502,6 @@ TEST(SSTableRowCursorTest, ThrowsOnInvalidColumnIndex) {
     TempFile file("htap_sstable_row_cursor_invalid_column_index.bin");
 
     RowFileBuilder builder;
-
     builder.add_block(
         /*min_key=*/1,
         /*max_key=*/2,
@@ -558,7 +573,7 @@ TEST(SSTableRowCursorTest, ThrowsOnTruncatedKey) {
     TempFile file("htap_sstable_row_cursor_truncated_key.bin");
 
     std::vector<char> file_data;
-    append_pod<std::int32_t>(file_data, 42); // less than sizeof(Key)
+    append_pod(file_data, 42); // less than sizeof(Key)
 
     std::vector<read::sstable::RowBlockMeta> blocks = {
         make_meta(
@@ -597,7 +612,7 @@ TEST(SSTableRowCursorTest, ThrowsOnTruncatedValue) {
     append_pod(file_data, bitmap);
 
     // age is present but truncated: only int32 instead of int64
-    append_pod<std::int32_t>(file_data, 10);
+    append_pod(file_data, 10);
 
     std::vector<read::sstable::RowBlockMeta> blocks = {
         make_meta(
