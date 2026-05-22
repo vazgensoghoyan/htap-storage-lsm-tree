@@ -1,4 +1,4 @@
-#include "storage/read/sstable/sparse_row_block_selector.hpp"
+#include "storage/read/sstable/sparse_block_selector.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -8,12 +8,12 @@ namespace htap::storage::read::sstable {
 
 namespace {
 
-bool intersects(const RowBlockMeta& block, const KeyRange& range) {
-    if (range.from && block.max_key <= *range.from) {
+bool intersects(Key min_key, Key max_key, const KeyRange& range) {
+    if (range.from && max_key <= *range.from) {
         return false;
     }
 
-    if (range.to && block.min_key >= *range.to) {
+    if (range.to && min_key >= *range.to) {
         return false;
     }
 
@@ -22,7 +22,7 @@ bool intersects(const RowBlockMeta& block, const KeyRange& range) {
 
 } 
 
-MetadataBlockRange SparseRowBlockSelector::select_metadata_range(
+MetadataBlockRange SparseBlockSelector::select_metadata_range(
     const std::vector<htap::lsmtree::sstable::SparseIndexEntry>& index,
     const KeyRange& range,
     std::uint32_t total_blocks
@@ -97,19 +97,36 @@ MetadataBlockRange SparseRowBlockSelector::select_metadata_range(
     };
 }
 
-std::vector<RowBlockMeta> SparseRowBlockSelector::filter_candidate_blocks(
+std::vector<RowBlockMeta> SparseBlockSelector::filter_candidate_row_blocks(
     const std::vector<RowBlockMeta>& candidates,
     const KeyRange& range
 ) const {
     std::vector<RowBlockMeta> selected;
 
     for (const auto& block : candidates) {
-        if (intersects(block, range)) {
+        if (intersects(block.min_key, block.max_key, range)) {
             selected.push_back(block);
         }
     }
 
     return selected;
 }
+
+
+std::vector<ColumnBlockMeta> SparseBlockSelector::filter_candidate_column_blocks(
+    const std::vector<ColumnBlockMeta>& candidates,
+    const KeyRange& range
+) const {
+    std::vector<ColumnBlockMeta> selected;
+
+    for (const auto& block : candidates) {
+        if (intersects(block.min_key, block.max_key, range)) {
+            selected.push_back(block);
+        }
+    }
+
+    return selected;
+}
+
 
 }
