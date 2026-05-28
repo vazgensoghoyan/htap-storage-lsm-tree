@@ -6,6 +6,7 @@
 #include "storage/read/sstable/sstable_reader.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 
@@ -17,10 +18,10 @@ std::unique_ptr<ICursor> make_sstable_cursor(
     const std::vector<ValueType>& schema,
     const std::vector<std::size_t>& projection
 ) {
-    SSTableReader reader(info.path);
+    std::unique_ptr<SSTableReader> reader = std::make_unique<SSTableReader>(info.path);
     SparseBlockSelector selector;
 
-    const auto sparse_index = reader.read_sparse_index();
+    const auto sparse_index = reader->read_sparse_index();
 
     const auto selected_metadata_range = selector.select_metadata_range(
         sparse_index,
@@ -34,7 +35,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
 
     switch (info.layout) {
         case lsmtree::SSTLayout::ROW: {
-            auto candidates = reader.read_row_metadata_range(
+            auto candidates = reader->read_row_metadata_range(
                 selected_metadata_range.first_block_id,
                 selected_metadata_range.block_count
             );
@@ -49,7 +50,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
             }
 
             return std::make_unique<cursor::SSTableRowCursor>(
-                info.path,
+                std::move(reader),
                 std::move(filtered_blocks),
                 range,
                 schema,
@@ -58,7 +59,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
         }
         
         case lsmtree::SSTLayout::COLUMN: {
-            auto candidates = reader.read_column_metadata_range(
+            auto candidates = reader->read_column_metadata_range(
                 selected_metadata_range.first_block_id,
                 selected_metadata_range.block_count,
                 static_cast<std::uint32_t>(schema.size())
@@ -74,7 +75,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
             }
 
             return std::make_unique<cursor::SSTableColumnCursor>(
-                info.path,
+                std::move(reader),
                 std::move(filtered_blocks),
                 range,
                 schema,
@@ -84,7 +85,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
 
     }
 
-    throw std::runtime_error("Unsuppored SSTable layout type");
+    throw std::runtime_error("Unsupported SSTable layout type");
 }
 
 }

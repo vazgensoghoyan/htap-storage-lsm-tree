@@ -138,19 +138,19 @@ std::vector<NullableValue> decode_value_column_block(
 }
 
 
-
 SSTableColumnCursor::SSTableColumnCursor(
-        std::filesystem::path path,
-        std::vector<read::sstable::ColumnBlockMeta> blocks,
-        read::sstable::KeyRange range,
-        std::vector<ValueType> schema,
-        std::vector<std::size_t> projection
-) : reader_(std::move(path)), 
-    blocks_(std::move(blocks)),
-    range_(range),
-    schema_(std::move(schema)),
-    projection_(std::move(projection)) {
-    
+    std::unique_ptr<read::sstable::SSTableReader> reader,
+    std::vector<read::sstable::ColumnBlockMeta> blocks,
+    read::sstable::KeyRange range,
+    std::vector<ValueType> schema,
+    std::vector<std::size_t> projection
+)
+    : reader_(std::move(reader)),
+      blocks_(std::move(blocks)),
+      range_(std::move(range)),
+      schema_(std::move(schema)),
+      projection_(std::move(projection)) {
+        
     if (schema_.empty()) {
         throw std::invalid_argument("SSTableColumnCursor requires non-empty schema");
     }
@@ -167,6 +167,22 @@ SSTableColumnCursor::SSTableColumnCursor(
 
     load_next_non_empty_block();
 }
+
+
+SSTableColumnCursor::SSTableColumnCursor(
+    std::filesystem::path path,
+    std::vector<read::sstable::ColumnBlockMeta> blocks,
+    read::sstable::KeyRange range,
+    std::vector<ValueType> schema,
+    std::vector<std::size_t> projection
+)
+    : SSTableColumnCursor(
+          std::make_unique<read::sstable::SSTableReader>(std::move(path)),
+          std::move(blocks),
+          std::move(range),
+          std::move(schema),
+          std::move(projection)
+      ) {}
 
 bool SSTableColumnCursor::valid() const {
     return current_row_idx_ < current_keys_.size();
@@ -243,7 +259,7 @@ void SSTableColumnCursor::load_next_non_empty_block() {
 
             if (block.column_idx == KEY_COLUMN_INDEX) {
                 current_keys_ = decode_key_block(
-                    reader_.read_block(block),
+                    reader_->read_block(block),
                     block.values_count
                 );
                 continue;
@@ -254,7 +270,7 @@ void SSTableColumnCursor::load_next_non_empty_block() {
             }
 
             current_columns_[block.column_idx] = decode_value_column_block(
-                reader_.read_block(block),
+                reader_->read_block(block),
                 block.values_count,
                 schema_[block.column_idx]
             );

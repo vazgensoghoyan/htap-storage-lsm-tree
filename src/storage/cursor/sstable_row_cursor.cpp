@@ -130,19 +130,19 @@ std::vector<Row> decode_row_block(
 }
 
 
-
 SSTableRowCursor::SSTableRowCursor(
-        std::filesystem::path path,
-        std::vector<read::sstable::RowBlockMeta> blocks,
-        read::sstable::KeyRange range,
-        std::vector<ValueType> schema,
-        std::vector<std::size_t> projection
-) : reader_(std::move(path)), 
-    blocks_(std::move(blocks)),
-    range_(range),
-    schema_(std::move(schema)),
-    projection_(std::move(projection)) {
-    
+    std::unique_ptr<read::sstable::SSTableReader> reader,
+    std::vector<read::sstable::RowBlockMeta> blocks,
+    read::sstable::KeyRange range,
+    std::vector<ValueType> schema,
+    std::vector<std::size_t> projection
+)
+    : reader_(std::move(reader)),
+      blocks_(std::move(blocks)),
+      range_(std::move(range)),
+      schema_(std::move(schema)),
+      projection_(std::move(projection)) {
+        
     if (schema_.empty()) {
         throw std::invalid_argument("SSTableRowCursor requires non-empty schema");
     }
@@ -157,6 +157,21 @@ SSTableRowCursor::SSTableRowCursor(
 
     load_next_non_empty_block();
 }
+
+
+SSTableRowCursor::SSTableRowCursor(
+        std::filesystem::path path,
+        std::vector<read::sstable::RowBlockMeta> blocks,
+        read::sstable::KeyRange range,
+        std::vector<ValueType> schema,
+        std::vector<std::size_t> projection
+)   : SSTableRowCursor(
+          std::make_unique<read::sstable::SSTableReader>(std::move(path)),
+          std::move(blocks),
+          std::move(range),
+          std::move(schema),
+          std::move(projection)
+      ) {}
 
 bool SSTableRowCursor::valid() const {
     return current_row_idx_ < current_rows_.size();
@@ -212,7 +227,7 @@ void SSTableRowCursor::load_next_non_empty_block() {
     while (next_block_idx_ < blocks_.size())
     {
         const auto& block = blocks_[next_block_idx_++];
-        auto block_data = reader_.read_block(block);
+        auto block_data = reader_->read_block(block);
 
         current_rows_ = decode_row_block(std::move(block_data), block.row_count, schema_);
 
