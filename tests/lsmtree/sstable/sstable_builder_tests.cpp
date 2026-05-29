@@ -30,7 +30,7 @@ static std::vector<uint8_t> read_file(const std::string& path) {
     return buffer;
 }
 
-static SSTFooter read_footer(const std::string& path) {
+static SSTableInfo read_footer(const std::string& path) {
     std::ifstream file(path, std::ios::binary);
     EXPECT_TRUE(file.is_open());
 
@@ -42,7 +42,7 @@ static SSTFooter read_footer(const std::string& path) {
                 + sizeof(uint8_t)),
                std::ios::end);
 
-    SSTFooter footer{};
+    SSTableInfo footer{};
 
     file.read(reinterpret_cast<char*>(&footer.magic), sizeof(uint32_t));
     file.read(reinterpret_cast<char*>(&footer.num_blocks), sizeof(uint32_t));
@@ -54,7 +54,7 @@ static SSTFooter read_footer(const std::string& path) {
     return footer;
 }
 
-static std::vector<RowBlockMeta> read_meta(const std::string& path, const SSTFooter& footer) {
+static std::vector<RowBlockMeta> read_meta(const std::string& path, const SSTableInfo& footer) {
     std::ifstream file(path, std::ios::binary);
     EXPECT_TRUE(file.is_open());
 
@@ -112,7 +112,7 @@ TEST(SSTableBuilderTest, CreatesFileAndFooterIsValid) {
         builder.finish();
     }
 
-    SSTFooter footer = read_footer(path);
+    SSTableInfo footer = read_footer(path);
 
     EXPECT_EQ(footer.magic, SST_MAGIC);
     EXPECT_EQ(footer.layout_type, ROW_LAYOUT);
@@ -135,7 +135,7 @@ TEST(SSTableBuilderTest, MetaOffsetIsValidAndReadable) {
         builder.finish();
     }
 
-    SSTFooter footer = read_footer(path);
+    SSTableInfo footer = read_footer(path);
     auto meta = read_meta(path, footer);
 
     EXPECT_EQ(meta.size(), footer.num_blocks);
@@ -160,7 +160,7 @@ TEST(SSTableBuilderTest, BlockOffsetsAreMonotonic) {
         builder.finish();
     }
 
-    SSTFooter footer = read_footer(path);
+    SSTableInfo footer = read_footer(path);
     auto meta = read_meta(path, footer);
 
     uint64_t last_offset = 0;
@@ -185,7 +185,7 @@ TEST(SSTableBuilderTest, MultipleBlocksExist) {
         builder.finish();
     }
 
-    SSTFooter footer = read_footer(path);
+    SSTableInfo footer = read_footer(path);
 
     EXPECT_GT(footer.num_blocks, 1);
 }
@@ -206,7 +206,7 @@ TEST(SSTableBuilderTest, FileIsNonEmpty) {
 
     auto data = read_file(path);
 
-    EXPECT_GT(data.size(), sizeof(SSTFooter));
+    EXPECT_GT(data.size(), sizeof(SSTableInfo));
 }
 
 TEST(SSTableBuilderTest, BlockMetaMatchesExpectedRange) {

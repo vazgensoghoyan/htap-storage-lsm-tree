@@ -1,25 +1,28 @@
-#pragma once // lsmtree/sstable/sst_footer.hpp
+#pragma once // lsmtree/sstable/sstable_info.hpp
 
 #include <cstdint>
 #include <cstddef>
 
+#include "storage/api/types.hpp"
+
 namespace htap::lsmtree {
 
-static constexpr uint8_t ROW_LAYOUT = 0;
-static constexpr uint8_t COLUMN_LAYOUT = 1;
+enum class SSTLayout : uint8_t {
+    ROW = 0,
+    COLUMN = 1
+};
 
 static constexpr uint32_t SST_MAGIC = 0x53535431; // "SST1" в little-endian
 
-struct SSTFooter {
+struct SSTableInfo {
     uint32_t magic = SST_MAGIC; // "SST1" например
 
     uint32_t num_blocks;
-    uint64_t meta_offset;
 
-    uint64_t min_key;
-    uint64_t max_key;
+    storage::Key min_key;
+    storage::Key max_key;
 
-    uint8_t layout_type; // ROW or COLUMN
+    SSTLayout layout_type; // ROW or COLUMN
 };
 
 } // namespace htap::lsmtree

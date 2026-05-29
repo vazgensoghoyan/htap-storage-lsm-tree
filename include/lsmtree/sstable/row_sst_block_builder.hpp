@@ -8,8 +8,8 @@
 namespace htap::lsmtree {
 
 struct RowBlockMeta {
-    int64_t min_key;
-    int64_t max_key;
+    storage::Key min_key;
+    storage::Key max_key;
     uint32_t row_count;
     uint64_t offset;        // это сам заполняет SSTableBuilder
     uint64_t size_bytes;
