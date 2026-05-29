@@ -25,6 +25,10 @@ public:
 
     std::unique_ptr<ImmutableMemTable> pop_immutable();
 
+    const MemTable& active() const noexcept;
+
+    const std::deque<std::unique_ptr<ImmutableMemTable>>& immutables() const noexcept;
+
 private:
     size_t threshold_;
 
