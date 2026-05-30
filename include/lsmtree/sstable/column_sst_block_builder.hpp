@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <cassert>
 
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
@@ -9,13 +10,13 @@
 namespace htap::lsmtree {
 
 struct ColumnBlockMeta {
-    int64_t min_key;
-    int64_t max_key;
-    int16_t column_id;      // это сам заполняет SSTableBuilder
+    storage::Key min_key;
+    storage::Key max_key;
+    uint16_t column_id;
     uint32_t values_count;
-    uint64_t offset;        // это сам заполняет SSTableBuilder
+    uint64_t offset;
     uint64_t size_bytes;
-    uint32_t block_id;      // это сам заполняет SSTableBuilder
+    uint32_t block_id;
 };
 
 struct ColumnSSTBlockResult {
@@ -25,7 +26,7 @@ struct ColumnSSTBlockResult {
 
 class ColumnSSTBlockBuilder {
 public:
-    ColumnSSTBlockBuilder(const storage::Column& column, int16_t column_id);
+    ColumnSSTBlockBuilder(const storage::Column& column, uint16_t column_id);
 
     void add(const storage::Row& row);
 
@@ -33,7 +34,6 @@ public:
     size_t size_bytes() const;
 
     ColumnSSTBlockResult finish();
-
     void reset();
 
 private:
@@ -41,8 +41,7 @@ private:
 
 private:
     const storage::Column& column_;
-
-    int16_t column_id_;
+    uint16_t column_id_;
 
     // encoded block:
     // [null_bitmap][data]
