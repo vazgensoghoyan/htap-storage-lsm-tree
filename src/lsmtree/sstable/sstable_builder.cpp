@@ -3,6 +3,9 @@
 #include <limits>
 #include <stdexcept>
 
+#include "lsmtree/sstable/format/sstable_info.hpp"
+#include "lsmtree/sstable/format/sparse_index_entry.hpp"
+
 #include "utils/logger.hpp"
 
 using namespace htap::lsmtree;
@@ -86,8 +89,12 @@ void SSTableBuilder::flush_block() {
     // SPARSE INDEX
 
     if (block_id_ % sparse_index_step_ == 0) {
-        index_writer_.write_i64(meta.min_key);
-        index_writer_.write_u32(meta.block_id);
+        format::SparseIndexEntry sparse_idx_entry{
+            .min_key = meta.min_key,
+            .block_id = meta.block_id
+        };
+        index_writer_.write_i64(sparse_idx_entry.min_key);
+        index_writer_.write_u32(sparse_idx_entry.block_id);
     }
 
     LOG_INFO(
@@ -110,12 +117,12 @@ void SSTableBuilder::write_info_file() {
 
     utils::BinaryWriter writer(info_file);
 
-    SSTableInfo info;
+    format::SSTableInfo info;
 
     info.num_blocks = block_id_;
     info.min_key = global_min_;
     info.max_key = global_max_;
-    info.layout_type = SSTLayout::ROW;
+    info.layout_type = format::SSTLayout::ROW;
 
     writer.write_u32(info.magic);
     writer.write_u32(info.num_blocks);

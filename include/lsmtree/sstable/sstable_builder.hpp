@@ -7,9 +7,7 @@
 #include "storage/model/schema.hpp"
 
 #include "lsmtree/sstable/row_sst_block_builder.hpp"
-#include "lsmtree/sstable/sstable_info.hpp"
 #include "lsmtree/sstable/sstable_paths.hpp"
-#include "lsmtree/sstable/sparse_index_entry.hpp"
 
 #include "utils/binary_writer.hpp"
 

@@ -1,11 +1,11 @@
-#pragma once // lsmtree/sstable/sstable_info.hpp
+#pragma once // lsmtree/sstable/format/sstable_info.hpp
 
 #include <cstdint>
 #include <cstddef>
 
 #include "storage/api/types.hpp"
 
-namespace htap::lsmtree {
+namespace htap::lsmtree::format {
 
 enum class SSTLayout : uint8_t {
     ROW = 0,
@@ -25,4 +25,4 @@ struct SSTableInfo {
     SSTLayout layout_type; // ROW or COLUMN
 };
 
-} // namespace htap::lsmtree
+} // namespace htap::lsmtree::format

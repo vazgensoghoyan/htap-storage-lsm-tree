@@ -118,7 +118,7 @@ ColumnSSTBlockResult ColumnSSTBlockBuilder::finish() {
     ColumnBlockMeta meta{
         .min_key = min_key_,
         .max_key = max_key_,
-        .column_id = static_cast<uint32_t>(column_id_),
+        .column_id = static_cast<uint16_t>(column_id_),
         .values_count = values_count_,
         .offset = 0,
         .size_bytes = static_cast<uint64_t>(size_bytes()),
