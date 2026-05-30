@@ -8,7 +8,7 @@
 
 #include "utils/logger.hpp"
 
-using namespace htap::lsmtree;
+using namespace htap::lsmtree::sstable;
 using namespace htap::storage;
 
 SSTableBuilder::SSTableBuilder(

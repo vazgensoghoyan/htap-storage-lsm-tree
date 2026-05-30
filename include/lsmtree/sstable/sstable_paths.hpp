@@ -2,7 +2,7 @@
 
 #include <filesystem>
 
-namespace htap::lsmtree {
+namespace htap::lsmtree::sstable {
 
 class SSTablePaths {
 public:
@@ -22,4 +22,4 @@ private:
     std::filesystem::path dir_;
 };
 
-} // namespace htap::lsmtree
+} // namespace htap::lsmtree::sstable

@@ -5,7 +5,7 @@
 
 #include "storage/api/types.hpp"
 
-namespace htap::lsmtree::format {
+namespace htap::lsmtree::sstable::format {
 
 enum class SSTLayout : uint8_t {
     ROW = 0,
@@ -25,4 +25,4 @@ struct SSTableInfo {
     SSTLayout layout_type; // ROW or COLUMN
 };
 
-} // namespace htap::lsmtree::format
+} // namespace htap::lsmtree::sstable::format

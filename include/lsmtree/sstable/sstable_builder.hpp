@@ -11,7 +11,7 @@
 
 #include "utils/binary_writer.hpp"
 
-namespace htap::lsmtree {
+namespace htap::lsmtree::sstable {
 
 class SSTableBuilder {
 public:
@@ -59,4 +59,4 @@ private:
     bool first_row_ = true;
 };
 
-} // namespace htap::lsmtree
+} // namespace htap::lsmtree::sstable

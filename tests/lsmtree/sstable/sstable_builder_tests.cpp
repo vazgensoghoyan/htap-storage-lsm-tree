@@ -10,7 +10,7 @@
 #include "lsmtree/sstable/format/sparse_index_entry.hpp"
 #include "lsmtree/sstable/sstable_builder.hpp"
 
-using namespace htap::lsmtree;
+using namespace htap::lsmtree::sstable;
 using namespace htap::storage;
 
 // Test helpers

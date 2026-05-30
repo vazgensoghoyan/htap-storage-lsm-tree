@@ -4,7 +4,7 @@
 #include <limits>
 #include <stdexcept>
 
-using namespace htap::lsmtree;
+using namespace htap::lsmtree::sstable;
 using namespace htap::storage;
 
 RowSSTBlockBuilder::RowSSTBlockBuilder(const Schema& schema)

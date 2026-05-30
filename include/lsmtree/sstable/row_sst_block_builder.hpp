@@ -5,7 +5,7 @@
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
 
-namespace htap::lsmtree {
+namespace htap::lsmtree::sstable {
 
 struct RowBlockMeta {
     storage::Key min_key;
@@ -54,4 +54,4 @@ private:
     static constexpr size_t TARGET_BLOCK_SIZE_BYTES = 4 * 1024; // 4 КБ
 };
 
-} // namespace htap::lsmtree
+} // namespace htap::lsmtree::sstable
