@@ -50,8 +50,9 @@ void validate_row(const Schema& schema, const Row& values) {
 
 } 
 
-LSMStorageEngine::LSMStorageEngine(std::string root_path)
-    : root_path_(std::move(root_path))
+LSMStorageEngine::LSMStorageEngine(std::string root_path, std::size_t memtable_threshold_)
+    : root_path_(std::move(root_path)),
+    memtable_threshold_(memtable_threshold_)
 {
     std::filesystem::create_directories(root_path_);
 }
@@ -68,7 +69,7 @@ void LSMStorageEngine::create_table(
 
     tables_.emplace(
         table_name,
-        std::make_unique<htap::lsmtree::LSMTree>(schema, path)
+        std::make_unique<htap::lsmtree::LSMTree>(schema, path, memtable_threshold_)
     );
 }
 

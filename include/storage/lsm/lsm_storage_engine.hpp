@@ -15,7 +15,10 @@ namespace htap::storage {
 
 class LSMStorageEngine final : public IStorageEngine {
 public:
-    explicit LSMStorageEngine(std::string root_path);
+    LSMStorageEngine(
+        std::string root_path, 
+        std::size_t memtable_threshold = htap::lsmtree::DEFAULT_MEMTABLE_THRESHOLD
+    );
 
     void create_table(const std::string& table_name, const Schema& schema) override;
 
@@ -45,6 +48,7 @@ private:
 
 private:
     std::string root_path_;
+    std::size_t memtable_threshold_;
     std::unordered_map<std::string, std::unique_ptr<htap::lsmtree::LSMTree>> tables_;
 };
 

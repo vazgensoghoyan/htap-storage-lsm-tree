@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace htap::storage {
@@ -70,23 +71,7 @@ std::vector<Key> CollectKeys(ICursor& cursor) {
     return keys;
 }
 
-std::vector<std::int64_t> CollectIntColumn(ICursor& cursor, std::size_t column_idx) {
-    std::vector<std::int64_t> values;
-
-    while (cursor.valid()) {
-        const auto value = cursor.value(column_idx);
-
-        EXPECT_TRUE(value.has_value());
-        EXPECT_TRUE(std::holds_alternative<std::int64_t>(*value));
-
-        values.push_back(std::get<std::int64_t>(*value));
-        cursor.next();
-    }
-
-    return values;
-}
-
-} // namespace
+} 
 
 TEST(LSMStorageEngineTest, CreateTableStoresSchema) {
     const auto dir = MakeTempDir("create_table_stores_schema");
@@ -198,8 +183,8 @@ TEST(LSMStorageEngineTest, GetMissingKeyReturnsEmptyCursor) {
     std::filesystem::remove_all(dir);
 }
 
-TEST(LSMStorageEngineTest, ProjectionRestrictsAvailableColumns) {
-    const auto dir = MakeTempDir("projection_restricts_available_columns");
+TEST(LSMStorageEngineTest, ProjectionAllowsReadingSelectedColumns) {
+    const auto dir = MakeTempDir("projection_allows_reading_selected_columns");
 
     LSMStorageEngine storage(dir.string());
     storage.create_table("users", MakeSchema());
@@ -216,15 +201,16 @@ TEST(LSMStorageEngineTest, ProjectionRestrictsAvailableColumns) {
 
     ASSERT_TRUE(cursor->valid());
 
-    EXPECT_NO_THROW({
-        const auto age = cursor->value(1);
-        EXPECT_TRUE(age.has_value());
-    });
+    EXPECT_EQ(cursor->key(), 1);
 
-    EXPECT_THROW(
-        cursor->value(2),
-        std::runtime_error
-    );
+    const auto age = cursor->value(1);
+
+    ASSERT_TRUE(age.has_value());
+    ASSERT_TRUE(std::holds_alternative<std::int64_t>(*age));
+    EXPECT_EQ(std::get<std::int64_t>(*age), 10);
+
+    cursor->next();
+    EXPECT_FALSE(cursor->valid());
 
     std::filesystem::remove_all(dir);
 }
