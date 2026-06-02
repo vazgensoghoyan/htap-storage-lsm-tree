@@ -26,7 +26,7 @@ std::vector<RowBlockMeta> LinearRowBlockSelector::select_blocks(const KeyRange& 
 
 std::optional<RowBlockMeta> LinearRowBlockSelector::select_block_for_key(Key key) const {
     for (const auto& block : blocks_) {
-        if (block.min_key <= key && key < block.max_key) {
+        if (block.min_key <= key && key <= block.max_key) {
             return block;
         }
     }
@@ -36,7 +36,7 @@ std::optional<RowBlockMeta> LinearRowBlockSelector::select_block_for_key(Key key
 
 bool LinearRowBlockSelector::intersects(const RowBlockMeta& block, const KeyRange& range) {
 
-    if (range.from.has_value() && block.max_key <= *range.from) {
+    if (range.from.has_value() && block.max_key < *range.from) {
         return false;
     }
 

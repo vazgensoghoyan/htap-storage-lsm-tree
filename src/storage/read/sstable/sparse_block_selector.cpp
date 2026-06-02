@@ -9,7 +9,7 @@ namespace htap::storage::read::sstable {
 namespace {
 
 bool intersects(Key min_key, Key max_key, const KeyRange& range) {
-    if (range.from && max_key <= *range.from) {
+    if (range.from && max_key < *range.from) {
         return false;
     }
 

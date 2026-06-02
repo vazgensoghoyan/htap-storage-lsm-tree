@@ -10,9 +10,9 @@
 namespace {
 
 using htap::storage::Key;
-using htap::storage::read::sstable::RowBlockMeta;
 using htap::storage::read::sstable::KeyRange;
 using htap::storage::read::sstable::LinearRowBlockSelector;
+using htap::storage::read::sstable::RowBlockMeta;
 
 RowBlockMeta MakeBlock(Key min_key, Key max_key, std::size_t block_id) {
     return RowBlockMeta{
@@ -48,9 +48,9 @@ TEST(LinearRowBlockSelectorTest, EmptySelectorSelectsNoBlocks) {
 
 TEST(LinearRowBlockSelectorTest, FullRangeSelectsAllBlocks) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(10, 20, 1),
-        MakeBlock(20, 30, 2),
+        MakeBlock(0, 9, 0),
+        MakeBlock(10, 19, 1),
+        MakeBlock(20, 29, 2),
     });
 
     auto selected = selector.select_blocks(KeyRange{
@@ -63,10 +63,10 @@ TEST(LinearRowBlockSelectorTest, FullRangeSelectsAllBlocks) {
 
 TEST(LinearRowBlockSelectorTest, SelectsIntersectingBlocksForHalfOpenRange) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(10, 20, 1),
-        MakeBlock(20, 30, 2),
-        MakeBlock(30, 40, 3),
+        MakeBlock(0, 9, 0),
+        MakeBlock(10, 19, 1),
+        MakeBlock(20, 29, 2),
+        MakeBlock(30, 39, 3),
     });
 
     auto selected = selector.select_blocks(KeyRange{
@@ -77,26 +77,25 @@ TEST(LinearRowBlockSelectorTest, SelectsIntersectingBlocksForHalfOpenRange) {
     EXPECT_EQ(BlockIds(selected), std::vector<std::size_t>({1, 2, 3}));
 }
 
-TEST(LinearRowBlockSelectorTest, DoesNotSelectBlockEndingAtRangeFrom) {
+TEST(LinearRowBlockSelectorTest, SelectsBlockEndingAtRangeFrom) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(10, 20, 1),
-        MakeBlock(20, 30, 2),
+        MakeBlock(0, 9, 0),
+        MakeBlock(10, 19, 1),
     });
 
     auto selected = selector.select_blocks(KeyRange{
-        .from = 10,
-        .to = 20,
+        .from = 9,
+        .to = 10,
     });
 
-    EXPECT_EQ(BlockIds(selected), std::vector<std::size_t>({1}));
+    EXPECT_EQ(BlockIds(selected), std::vector<std::size_t>({0}));
 }
 
 TEST(LinearRowBlockSelectorTest, DoesNotSelectBlockStartingAtExclusiveTo) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(10, 20, 1),
-        MakeBlock(20, 30, 2),
+        MakeBlock(0, 9, 0),
+        MakeBlock(10, 19, 1),
+        MakeBlock(20, 29, 2),
     });
 
     auto selected = selector.select_blocks(KeyRange{
@@ -109,8 +108,8 @@ TEST(LinearRowBlockSelectorTest, DoesNotSelectBlockStartingAtExclusiveTo) {
 
 TEST(LinearRowBlockSelectorTest, SelectsBlockContainingRangeFrom) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(10, 20, 1),
+        MakeBlock(0, 9, 0),
+        MakeBlock(10, 19, 1),
     });
 
     auto selected = selector.select_blocks(KeyRange{
@@ -123,8 +122,8 @@ TEST(LinearRowBlockSelectorTest, SelectsBlockContainingRangeFrom) {
 
 TEST(LinearRowBlockSelectorTest, RangeBeforeAllBlocksSelectsNoBlocks) {
     LinearRowBlockSelector selector({
-        MakeBlock(10, 20, 0),
-        MakeBlock(20, 30, 1),
+        MakeBlock(10, 19, 0),
+        MakeBlock(20, 29, 1),
     });
 
     auto selected = selector.select_blocks(KeyRange{
@@ -137,8 +136,8 @@ TEST(LinearRowBlockSelectorTest, RangeBeforeAllBlocksSelectsNoBlocks) {
 
 TEST(LinearRowBlockSelectorTest, RangeAfterAllBlocksSelectsNoBlocks) {
     LinearRowBlockSelector selector({
-        MakeBlock(10, 20, 0),
-        MakeBlock(20, 30, 1),
+        MakeBlock(10, 19, 0),
+        MakeBlock(20, 29, 1),
     });
 
     auto selected = selector.select_blocks(KeyRange{
@@ -151,9 +150,9 @@ TEST(LinearRowBlockSelectorTest, RangeAfterAllBlocksSelectsNoBlocks) {
 
 TEST(LinearRowBlockSelectorTest, OpenEndedFromSelectsPrefixBlocks) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(10, 20, 1),
-        MakeBlock(20, 30, 2),
+        MakeBlock(0, 9, 0),
+        MakeBlock(10, 19, 1),
+        MakeBlock(20, 29, 2),
     });
 
     auto selected = selector.select_blocks(KeyRange{
@@ -166,9 +165,9 @@ TEST(LinearRowBlockSelectorTest, OpenEndedFromSelectsPrefixBlocks) {
 
 TEST(LinearRowBlockSelectorTest, OpenEndedToSelectsSuffixBlocks) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(10, 20, 1),
-        MakeBlock(20, 30, 2),
+        MakeBlock(0, 9, 0),
+        MakeBlock(10, 19, 1),
+        MakeBlock(20, 29, 2),
     });
 
     auto selected = selector.select_blocks(KeyRange{
@@ -181,9 +180,9 @@ TEST(LinearRowBlockSelectorTest, OpenEndedToSelectsSuffixBlocks) {
 
 TEST(LinearRowBlockSelectorTest, SelectBlockForExistingKey) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(10, 20, 1),
-        MakeBlock(20, 30, 2),
+        MakeBlock(0, 9, 0),
+        MakeBlock(10, 19, 1),
+        MakeBlock(20, 29, 2),
     });
 
     auto block = selector.select_block_for_key(15);
@@ -194,8 +193,8 @@ TEST(LinearRowBlockSelectorTest, SelectBlockForExistingKey) {
 
 TEST(LinearRowBlockSelectorTest, SelectBlockForKeyOnLowerBoundary) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(10, 20, 1),
+        MakeBlock(0, 9, 0),
+        MakeBlock(10, 19, 1),
     });
 
     auto block = selector.select_block_for_key(10);
@@ -204,21 +203,22 @@ TEST(LinearRowBlockSelectorTest, SelectBlockForKeyOnLowerBoundary) {
     EXPECT_EQ(block->block_id, 1);
 }
 
-TEST(LinearRowBlockSelectorTest, SelectBlockForKeyOnExclusiveUpperBoundary) {
+TEST(LinearRowBlockSelectorTest, SelectBlockForKeyOnInclusiveUpperBoundary) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(10, 20, 1),
+        MakeBlock(0, 9, 0),
+        MakeBlock(10, 19, 1),
     });
 
-    auto block = selector.select_block_for_key(20);
+    auto block = selector.select_block_for_key(9);
 
-    EXPECT_FALSE(block.has_value());
+    ASSERT_TRUE(block.has_value());
+    EXPECT_EQ(block->block_id, 0);
 }
 
 TEST(LinearRowBlockSelectorTest, SelectBlockForMissingKeyReturnsNullopt) {
     LinearRowBlockSelector selector({
-        MakeBlock(0, 10, 0),
-        MakeBlock(20, 30, 1),
+        MakeBlock(0, 9, 0),
+        MakeBlock(20, 29, 1),
     });
 
     auto block = selector.select_block_for_key(15);

@@ -35,17 +35,17 @@ KeyRange make_range(std::optional<Key> from, std::optional<Key> to) {
 
 std::vector<ColumnBlockMeta> make_blocks() {
     return {
-        make_block(0, 10, 0, 0),
-        make_block(0, 10, 0, 1),
-        make_block(0, 10, 0, 2),
+        make_block(0, 9, 0, 0),
+        make_block(0, 9, 0, 1),
+        make_block(0, 9, 0, 2),
 
-        make_block(10, 20, 1, 0),
-        make_block(10, 20, 1, 1),
-        make_block(10, 20, 1, 2),
+        make_block(10, 19, 1, 0),
+        make_block(10, 19, 1, 1),
+        make_block(10, 19, 1, 2),
 
-        make_block(20, 30, 2, 0),
-        make_block(20, 30, 2, 1),
-        make_block(20, 30, 2, 2),
+        make_block(20, 29, 2, 0),
+        make_block(20, 29, 2, 1),
+        make_block(20, 29, 2, 2),
     };
 }
 
@@ -66,10 +66,10 @@ void expect_blocks_eq(
     const std::vector<ColumnBlockMeta>& actual_blocks,
     const std::vector<std::pair<std::size_t, std::size_t>>& expected
 ) {
-    EXPECT_TRUE(block_ids_and_columns(actual_blocks) == expected);
+    EXPECT_EQ(block_ids_and_columns(actual_blocks), expected);
 }
 
-} 
+} // namespace
 
 TEST(LinearColumnBlockSelectorTest, SelectsBlocksIntersectingClosedOpenRange) {
     LinearColumnBlockSelector selector(make_blocks());
@@ -142,7 +142,17 @@ TEST(LinearColumnBlockSelectorTest, SelectBlockGroupForKeyReturnsAllColumnsOfMat
     });
 }
 
-TEST(LinearColumnBlockSelectorTest, SelectBlockGroupForKeyRespectsMaxKeyExclusive) {
+TEST(LinearColumnBlockSelectorTest, SelectBlockGroupForKeyRespectsMaxKeyInclusive) {
+    LinearColumnBlockSelector selector(make_blocks());
+
+    const auto selected = selector.select_block_group_for_key(19);
+
+    expect_blocks_eq(selected, {
+        {1, 0}, {1, 1}, {1, 2},
+    });
+}
+
+TEST(LinearColumnBlockSelectorTest, SelectBlockGroupForKeyOnLowerBoundary) {
     LinearColumnBlockSelector selector(make_blocks());
 
     const auto selected = selector.select_block_group_for_key(20);
@@ -162,9 +172,9 @@ TEST(LinearColumnBlockSelectorTest, SelectBlockGroupForKeyReturnsEmptyWhenKeyIsO
 
 TEST(LinearColumnBlockSelectorTest, PreservesInputOrder) {
     std::vector<ColumnBlockMeta> blocks = {
-        make_block(10, 20, 1, 2),
-        make_block(10, 20, 1, 0),
-        make_block(10, 20, 1, 1),
+        make_block(10, 19, 1, 2),
+        make_block(10, 19, 1, 0),
+        make_block(10, 19, 1, 1),
     };
 
     LinearColumnBlockSelector selector(blocks);

@@ -26,7 +26,7 @@ std::vector<ColumnBlockMeta> LinearColumnBlockSelector::select_block_group_for_k
     std::vector<ColumnBlockMeta> result;
 
     for (const auto& block : blocks_) {
-        if (block.min_key <= key && key < block.max_key) {
+        if (block.min_key <= key && key <= block.max_key) {
             result.push_back(block);
         }
     }
@@ -38,7 +38,7 @@ bool LinearColumnBlockSelector::intersects(
     const ColumnBlockMeta& block,
     const KeyRange& range
 ) {
-    if (range.from.has_value() && block.max_key <= *range.from) {
+    if (range.from.has_value() && block.max_key < *range.from) {
         return false;
     }
 
