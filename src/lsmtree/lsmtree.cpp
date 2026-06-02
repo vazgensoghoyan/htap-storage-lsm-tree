@@ -97,7 +97,8 @@ std::string LSMTree::build_sst_path(uint64_t id) const {
 
 std::unique_ptr<ICursor> LSMTree::scan(
     const storage::read::sstable::KeyRange& range,
-    const std::vector<std::size_t>& projection
+    const std::vector<std::size_t>& projection,
+    storage::ScanOrder order
 ) const {
     std::vector<std::unique_ptr<ICursor>> cursors;
 
@@ -156,7 +157,7 @@ std::unique_ptr<ICursor> LSMTree::scan(
 
     return cursor::compose_cursors(
         std::move(cursors),
-        ScanOrder::KeyAscending
+        order
     );
 
 }

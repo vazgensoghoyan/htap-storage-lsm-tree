@@ -26,7 +26,8 @@ public:
 
     std::unique_ptr<storage::ICursor> scan(
         const storage::read::sstable::KeyRange& range,
-        const std::vector<std::size_t>& projection
+        const std::vector<std::size_t>& projection,
+        storage::ScanOrder order
     ) const;
 
     const storage::Schema& schema() const noexcept;
