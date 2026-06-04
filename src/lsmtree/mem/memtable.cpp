@@ -29,3 +29,15 @@ std::unique_ptr<ImmutableMemTable> MemTable::to_sorted_immutable() {
 
     return std::make_unique<ImmutableMemTable>(std::move(out));
 }
+
+MemTable::Iterator MemTable::begin() const {
+    return data_.begin();
+}
+
+MemTable::Iterator MemTable::end() const {
+    return data_.end();
+}
+
+MemTable::Iterator MemTable::lower_bound(storage::Key key) const {
+    return data_.lower_bound(key);
+}

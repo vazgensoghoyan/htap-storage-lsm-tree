@@ -15,10 +15,15 @@ enum class ValueType {
     STRING
 };
 
+enum class ScanOrder {
+    Unordered,
+    KeyAscending
+};
+
 using Key = int64_t;
 using OptKey = std::optional<Key>;
 
-using Value = std::variant<int64_t, double, std::string>; // either haskell
+using Value = std::variant<int64_t, double, std::string>;
 
 using NullableValue = std::optional<Value>;
 

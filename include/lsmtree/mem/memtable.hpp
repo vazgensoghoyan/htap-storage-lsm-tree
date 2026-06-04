@@ -11,6 +11,9 @@ namespace htap::lsmtree {
 
 class MemTable {
 public:
+    using Storage = std::map<storage::Key, storage::Row>;
+    using Iterator = Storage::const_iterator;
+
     MemTable() = default;
 
     void insert(const storage::Row& row);
@@ -19,6 +22,10 @@ public:
 
     // гарантирует отсортированность данных в ImmMemTable
     std::unique_ptr<ImmutableMemTable> to_sorted_immutable();
+
+    Iterator begin() const;
+    Iterator end() const;
+    Iterator lower_bound(storage::Key key) const;
 
 private:
     std::map<storage::Key, storage::Row> data_;

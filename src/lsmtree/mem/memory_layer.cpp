@@ -38,3 +38,11 @@ std::unique_ptr<ImmutableMemTable> MemoryLayer::pop_immutable() {
 
     return imm;
 }
+
+const MemTable& MemoryLayer::active() const noexcept {
+    return *active_;
+}
+
+const std::deque<std::unique_ptr<ImmutableMemTable>>& MemoryLayer::immutables() const noexcept {
+    return immutables_;
+}

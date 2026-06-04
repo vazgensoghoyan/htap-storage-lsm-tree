@@ -260,6 +260,31 @@ int CompareNullableResultValues(const NullableResultValue& left, const NullableR
     return CompareResultValues(*left, *right);
 }
 
+bool IsRuquiredKeyAsc(const BoundSelectStatement& statement) {
+    
+    if (statement.order_by_items.empty()) return false;
+
+    if (!statement.schema) {
+        throw std::runtime_error("BoundSelectStatement schema is null");
+    }
+
+    const auto& first_order_item = statement.order_by_items.front();
+    
+    if (first_order_item.direction != parser::OrderDirection::Asc) {
+        return false;
+    }
+
+    if (first_order_item.expression->kind != BoundExpressionKind::Column) {
+        return false;
+    }
+
+    const auto& first_order_expression = static_cast<const BoundColumnExpression&>(
+        *first_order_item.expression
+    );
+
+    return first_order_expression.column_index == storage::KEY_COLUMN_INDEX;
+
+}
 }
 
 Executor::Executor(storage::IStorageEngine& storage_engine) 
@@ -550,7 +575,18 @@ SelectResult Executor::ExecutePlainSelect(
     };
     std::vector<PlainSortRow> sorted_rows;
 
-    SelectCursorBuildResult cursor_build_result = BuildCursorForSelect(statement, projection);
+    const bool requires_key_asc = IsRuquiredKeyAsc(statement);
+
+    SelectCursorBuildResult cursor_build_result = BuildCursorForSelect(
+        statement, 
+        projection,
+        requires_key_asc
+    );
+
+    can_apply_early_limit = requires_key_asc 
+        ? requires_key_asc
+        : can_apply_early_limit;
+
     if (cursor_build_result.empty_result) {
         return result;
     }
@@ -578,7 +614,7 @@ SelectResult Executor::ExecutePlainSelect(
 
         }
 
-        if (statement.order_by_items.empty()) {
+        if (statement.order_by_items.empty() || requires_key_asc) {
             result.rows.push_back(std::move(row));
 
             if (can_apply_early_limit && statement.limit.has_value() &&
@@ -604,7 +640,7 @@ SelectResult Executor::ExecutePlainSelect(
         cursor->next();
     }
 
-    if (!statement.order_by_items.empty()) {
+    if (!statement.order_by_items.empty() && !requires_key_asc) {
         std::sort(
             sorted_rows.begin(),
             sorted_rows.end(),
@@ -649,9 +685,11 @@ SelectResult Executor::ExecutePlainSelect(
 
 Executor::SelectCursorBuildResult Executor::BuildCursorForSelect(
     const BoundSelectStatement& statement,
-    const std::vector<std::size_t>& projection
+    const std::vector<std::size_t>& projection,
+    bool requires_key_asc
 ) const {
     SelectCursorBuildResult build_result;
+    build_result.requires_key_asc = requires_key_asc;
 
     std::vector<const BoundExpression*> conjuncts;
     if (statement.where_expression) {
@@ -797,6 +835,10 @@ Executor::SelectCursorBuildResult Executor::BuildCursorForSelect(
         return build_result;
     }
 
+    const storage::ScanOrder order = requires_key_asc 
+        ? storage::ScanOrder::KeyAscending
+        : storage::ScanOrder::Unordered;
+
     if (found_any_range_predicate) {
         if (from.has_value() && to.has_value() && *from >= *to) {
             build_result.empty_result = true;
@@ -807,7 +849,8 @@ Executor::SelectCursorBuildResult Executor::BuildCursorForSelect(
             statement.table_name,
             from,
             to,
-            projection
+            projection,
+            order
         );
         return build_result;
     }
@@ -816,8 +859,10 @@ Executor::SelectCursorBuildResult Executor::BuildCursorForSelect(
         statement.table_name,
         std::nullopt,
         std::nullopt,
-        projection
+        projection,
+        order
     );
+
     return build_result;
 }
 
@@ -1038,7 +1083,7 @@ SelectResult Executor::ExecuteGlobalAggregateSelect(
         aggregate_states.push_back(GlobalAggregateState{});
     }
 
-    SelectCursorBuildResult cursor_build_result = BuildCursorForSelect(statement, projection);
+    SelectCursorBuildResult cursor_build_result = BuildCursorForSelect(statement, projection, false);
 
 
     if (!cursor_build_result.empty_result) {
