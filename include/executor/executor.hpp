@@ -19,6 +19,7 @@ private:
     struct SelectCursorBuildResult {
         std::unique_ptr<storage::ICursor> cursor;
         bool empty_result = false;
+        bool requires_key_asc = false;
     };
 
 private:
@@ -65,7 +66,8 @@ private:
 
     SelectCursorBuildResult BuildCursorForSelect(
         const BoundSelectStatement& statement,
-        const std::vector<std::size_t>& projection
+        const std::vector<std::size_t>& projection,
+        bool requires_key_asc
     ) const;
 
 private:
