@@ -1,6 +1,7 @@
 #include <stdexcept>
 #include <limits>
 #include <algorithm>
+#include <map>
 
 #include "executor/executor.hpp"
 
@@ -259,6 +260,36 @@ int CompareNullableResultValues(const NullableResultValue& left, const NullableR
 
     return CompareResultValues(*left, *right);
 }
+
+
+using GroupKey = std::vector<NullableResultValue>;
+
+struct GroupKeyLess {
+    bool operator()(const GroupKey& left, const GroupKey& right) const {
+        const std::size_t common_size = std::min(left.size(), right.size());
+
+        for (std::size_t i = 0; i < common_size; ++i) {
+            const int cmp = CompareNullableResultValues(left[i], right[i]);
+
+            if (cmp < 0) return true;
+
+            if (cmp > 0) return false;
+        }
+
+        return left.size() < right.size();
+    }
+};
+
+struct GroupState {
+    std::vector<NullableResultValue> select_expression_values;
+    std::vector<NullableResultValue> order_by_values;
+    std::vector<GlobalAggregateState> aggregate_states;
+};
+
+struct GroupedSortRow {
+    std::vector<NullableResultValue> sort_keys;
+    ResultRow row;
+};
 
 bool IsRuquiredKeyAsc(const BoundSelectStatement& statement) {
     
@@ -1125,10 +1156,154 @@ SelectResult Executor::ExecuteGroupedAggregateSelect(
     const std::vector<std::string>& column_names,
     const std::vector<std::size_t>& projection
 ) {
-    (void)statement;
-    (void)column_names;
-    (void)projection;
-    throw std::runtime_error("ExecuteGroupedAggregateSelect is not implemented yet");
+    if (!statement.schema) {
+        throw std::runtime_error("BoundSelectStatement schema is null");
+    }
+
+    SelectResult result;
+    result.column_names = column_names;
+
+    std::map<GroupKey, GroupState, GroupKeyLess> groups;
+    std::vector<GroupedSortRow> sorted_rows;
+
+    SelectCursorBuildResult cursor_build_result = BuildCursorForSelect(statement, projection, false);
+
+    if (!cursor_build_result.empty_result) {
+        std::unique_ptr<storage::ICursor> cursor = std::move(cursor_build_result.cursor);
+
+        while (cursor->valid()) {
+            if (statement.where_expression && !EvaluatePredicate(*statement.where_expression, *cursor)) {
+                cursor->next();
+                continue;
+            }
+
+            GroupKey group_key;
+            group_key.reserve(statement.group_by_items.size());
+
+            for (const auto& group_by_item : statement.group_by_items) {
+                group_key.push_back(EvaluateExpression(*group_by_item, *cursor));
+            }
+
+            auto insert_result = groups.emplace(std::move(group_key), GroupState{});
+            auto group_it = insert_result.first;
+            bool inserted = insert_result.second;
+            GroupState& group_state = group_it->second;
+
+            if (inserted) {
+                group_state.aggregate_states.resize(statement.select_items.size());
+
+                group_state.select_expression_values.reserve(statement.select_items.size());
+                for (const auto& item : statement.select_items) {
+                    if (const auto* expression_item =
+                            dynamic_cast<const BoundSelectItemExpression*>(item.get())) {
+                        group_state.select_expression_values.push_back(
+                            EvaluateExpression(*expression_item->expression, *cursor)
+                        );
+                    } else {
+                        group_state.select_expression_values.push_back(std::nullopt);
+                    }
+                }
+
+                group_state.order_by_values.reserve(statement.order_by_items.size());
+                for (const auto& order_by_item : statement.order_by_items) {
+                    group_state.order_by_values.push_back(
+                        EvaluateExpression(*order_by_item.expression, *cursor)
+                    );
+                }
+            }
+
+            for (std::size_t i = 0; i < statement.select_items.size(); ++i) {
+                const auto* aggregate =
+                    dynamic_cast<const BoundSelectAggregateExpression*>(statement.select_items[i].get());
+
+                if (!aggregate) {
+                    continue;
+                }
+
+                NullableResultValue value = EvaluateExpression(*aggregate->expression, *cursor);
+                UpdateGlobalAggregateState(value, *aggregate, group_state.aggregate_states[i]);
+            }
+
+            cursor->next();
+        }
+    }
+
+    for (const auto& group_entry : groups) {
+        const GroupState& group_state = group_entry.second;
+
+        ResultRow row;
+        row.reserve(statement.select_items.size());
+
+        for (std::size_t i = 0; i < statement.select_items.size(); ++i) {
+            if (const auto* expression_item =
+                    dynamic_cast<const BoundSelectItemExpression*>(statement.select_items[i].get())) {
+                (void)expression_item;
+                row.push_back(group_state.select_expression_values[i]);
+                continue;
+            }
+
+            if (const auto* aggregate =
+                    dynamic_cast<const BoundSelectAggregateExpression*>(statement.select_items[i].get())) {
+                row.push_back(
+                    FinalizeAggregateState(*aggregate, group_state.aggregate_states[i])
+                );
+                continue;
+            }
+
+            throw std::runtime_error("Unsupported bound select item in GROUP BY");
+        }
+
+        if (statement.order_by_items.empty()) {
+            result.rows.push_back(std::move(row));
+        } else {
+            sorted_rows.push_back(
+                GroupedSortRow {
+                    group_state.order_by_values,
+                    std::move(row)
+                }
+            );
+        }
+    }
+
+    if (!statement.order_by_items.empty()) {
+        std::sort(
+            sorted_rows.begin(),
+            sorted_rows.end(),
+            [&](const GroupedSortRow& x, const GroupedSortRow& y) {
+                for (std::size_t i = 0; i < statement.order_by_items.size(); ++i) {
+                    int cmp = CompareNullableResultValues(x.sort_keys[i], y.sort_keys[i]);
+
+                    if (cmp == 0) {
+                        continue;
+                    }
+
+                    if (statement.order_by_items[i].direction == parser::OrderDirection::Asc) {
+                        return cmp < 0;
+                    }
+
+                    if (statement.order_by_items[i].direction == parser::OrderDirection::Desc) {
+                        return cmp > 0;
+                    }
+
+                    throw std::runtime_error("Unsupported order direction");
+                }
+
+                return false;
+            }
+        );
+
+        result.rows.reserve(sorted_rows.size());
+
+        for (auto& sorted_row : sorted_rows) {
+            result.rows.push_back(std::move(sorted_row.row));
+        }
+    }
+
+    if (statement.limit.has_value() && result.rows.size() > *statement.limit) {
+        result.rows.resize(*statement.limit);
+    }
+
+    return result;
 }
 
 }

@@ -1,5 +1,6 @@
 #pragma once // utils/binary_writer.hpp
 
+#include <bit>
 #include <cstdint>
 #include <string>
 #include <string_view>
