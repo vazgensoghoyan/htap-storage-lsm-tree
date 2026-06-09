@@ -1,7 +1,7 @@
 # build dirs
-build/
-cmake-build-*/
-out/
+/build/
+/cmake-build-*/
+/out/
 
 # CMake
 CMakeCache.txt

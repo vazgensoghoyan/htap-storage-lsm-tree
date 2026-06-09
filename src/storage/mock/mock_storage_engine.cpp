@@ -60,7 +60,15 @@ std::unique_ptr<ICursor> MockStorageEngine::get(const std::string& table_name, K
     return std::make_unique<MockCursor>(&table.data, key, key + 1);
 }
 
-std::unique_ptr<ICursor> MockStorageEngine::scan(const std::string& table_name, OptKey from, OptKey to, const std::vector<size_t>&) const {
+std::unique_ptr<ICursor> MockStorageEngine::scan(
+    const std::string& table_name,
+    std::optional<Key> from,
+    std::optional<Key> to,
+    const std::vector<size_t>& projection,
+    ScanOrder order
+) const {
+    (void)projection;
+    (void)order;
     const auto& table = get_table(table_name);
     LOG_DEBUG("scan: table='{}', from={}, to={}",
         table_name,
