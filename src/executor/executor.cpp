@@ -1162,8 +1162,9 @@ SelectResult Executor::ExecuteGroupedAggregateSelect(
 
     SelectResult result;
     result.column_names = column_names;
-    
+
     std::map<GroupKey, GroupState, GroupKeyLess> groups;
+    std::vector<GroupedSortRow> sorted_rows;
 
     SelectCursorBuildResult cursor_build_result = BuildCursorForSelect(statement, projection, false);
 
@@ -1252,7 +1253,54 @@ SelectResult Executor::ExecuteGroupedAggregateSelect(
             throw std::runtime_error("Unsupported bound select item in GROUP BY");
         }
 
-        result.rows.push_back(std::move(row));
+        if (statement.order_by_items.empty()) {
+            result.rows.push_back(std::move(row));
+        } else {
+            sorted_rows.push_back(
+                GroupedSortRow {
+                    group_state.order_by_values,
+                    std::move(row)
+                }
+            );
+        }
+    }
+
+    if (!statement.order_by_items.empty()) {
+        std::sort(
+            sorted_rows.begin(),
+            sorted_rows.end(),
+            [&](const GroupedSortRow& x, const GroupedSortRow& y) {
+                for (std::size_t i = 0; i < statement.order_by_items.size(); ++i) {
+                    int cmp = CompareNullableResultValues(x.sort_keys[i], y.sort_keys[i]);
+
+                    if (cmp == 0) {
+                        continue;
+                    }
+
+                    if (statement.order_by_items[i].direction == parser::OrderDirection::Asc) {
+                        return cmp < 0;
+                    }
+
+                    if (statement.order_by_items[i].direction == parser::OrderDirection::Desc) {
+                        return cmp > 0;
+                    }
+
+                    throw std::runtime_error("Unsupported order direction");
+                }
+
+                return false;
+            }
+        );
+
+        result.rows.reserve(sorted_rows.size());
+
+        for (auto& sorted_row : sorted_rows) {
+            result.rows.push_back(std::move(sorted_row.row));
+        }
+    }
+
+    if (statement.limit.has_value() && result.rows.size() > *statement.limit) {
+        result.rows.resize(*statement.limit);
     }
 
     return result;
