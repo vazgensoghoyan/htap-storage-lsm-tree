@@ -17,7 +17,7 @@ SSTableMetadataCache::SSTableMetadataCache(
     max_cached_pages_(max_cached_pages),
     reader_(info.path),
     sparse_index_(reader_.read_sparse_index()) {
-        
+
     if (page_blocks_ == 0) {
         throw std::runtime_error("SSTableMetadataCache page_blocks must be positive");
     }
@@ -117,13 +117,13 @@ std::vector<ColumnBlockMeta>& SSTableMetadataCache::get_column_page(std::uint32_
 
     column_lru_.push_front(page_id);
 
-    auto [inserted_it, inserted] = column_pages_.emplace(
+    auto inserted_it = column_pages_.emplace(
         page_id,
         ColumnPage{
             .blocks = std::move(blocks),
             .lru_it = column_lru_.begin()
         }
-    );
+    ).first;
 
     evict_column_if_needed();
 
