@@ -17,10 +17,47 @@ namespace {
 std::vector<Row> decode_row_block(
     std::vector<char> block_data,
     std::uint32_t row_count,
-    const std::vector<ValueType>& schema
+    const std::vector<ValueType>& schema,
+    const std::vector<bool>& projected_columns
 ) {
 
     std::size_t pos = 0;
+
+    auto skip_bytes = [&](std::size_t size) {
+        if (pos + size > block_data.size()) {
+            throw std::runtime_error("Unexpected end of SSTable row block");
+        }
+
+        pos += size;
+    };
+
+    auto skip_string = [&]() {
+        if (pos + sizeof(std::uint32_t) > block_data.size()) {
+            throw std::runtime_error("Unexpected end of SSTable row block");
+        }
+
+        std::uint32_t size;
+        std::memcpy(&size, block_data.data() + pos, sizeof(std::uint32_t));
+        pos += sizeof(std::uint32_t);
+
+        skip_bytes(size);
+    };
+
+    auto skip_value = [&](ValueType type) {
+        switch (type) {
+            case ValueType::INT64:
+                skip_bytes(sizeof(std::int64_t));
+                break;
+
+            case ValueType::DOUBLE:
+                skip_bytes(sizeof(double));
+                break;
+
+            case ValueType::STRING:
+                skip_string();
+                break;
+        }
+    };
 
     auto read_bytes = [&](std::size_t size) {
         if (pos + size > block_data.size()) {
@@ -99,8 +136,19 @@ std::vector<Row> decode_row_block(
             const std::size_t byte_idx = value_column_idx / 8;
             const std::size_t bit_idx = value_column_idx % 8;
 
-            if (is_null_bitmap[byte_idx] & (1u << bit_idx)) {
-                row[column_idx] = std::nullopt;
+            const bool is_null = is_null_bitmap[byte_idx] & (1u << bit_idx);
+            const bool is_projected = projected_columns[column_idx];
+
+            if (is_null) {
+                if (is_projected) {
+                    row[column_idx] = std::nullopt;
+                }
+
+                continue;
+            }
+
+            if (!is_projected) {
+                skip_value(schema[column_idx]);
                 continue;
             }
 
@@ -127,6 +175,29 @@ std::vector<Row> decode_row_block(
     return rows;
 }
 
+std::vector<bool> make_projection_mask(
+    std::size_t schema_size,
+    const std::vector<std::size_t>& projection
+) {
+    std::vector<bool> mask(schema_size, false);
+
+    for (std::size_t column_idx : projection) {
+        if (column_idx >= schema_size) {
+            throw std::out_of_range("Projection column index out of schema range");
+        }
+
+        if (mask[column_idx]) {
+            throw std::runtime_error("Projection contains duplicate column index");
+        }
+
+        mask[column_idx] = true;
+    }
+
+    mask[KEY_COLUMN_INDEX] = true;
+
+    return mask;
+}
+
 }
 
 
@@ -141,7 +212,8 @@ SSTableRowCursor::SSTableRowCursor(
       blocks_(std::move(blocks)),
       range_(std::move(range)),
       schema_(std::move(schema)),
-      projection_(std::move(projection)) {
+      projection_(std::move(projection)),
+      projected_columns_(make_projection_mask(schema_.size(), projection_)) {
         
     if (schema_.empty()) {
         throw std::invalid_argument("SSTableRowCursor requires non-empty schema");
@@ -229,7 +301,12 @@ void SSTableRowCursor::load_next_non_empty_block() {
         const auto& block = blocks_[next_block_idx_++];
         auto block_data = reader_->read_block(block);
 
-        current_rows_ = decode_row_block(std::move(block_data), block.row_count, schema_);
+        current_rows_ = decode_row_block(
+            std::move(block_data), 
+            block.row_count, 
+            schema_,
+            projected_columns_
+        );
 
         current_row_idx_ = 0;
 
