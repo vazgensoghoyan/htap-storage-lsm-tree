@@ -61,13 +61,13 @@ void LSMTree::flush_memtable() {
 
     LOG_INFO("Flushing SSTable id={} to {}", sst_id, file_path);
 
-    SSTableBuilder builder(schema_, file_path);
+    sstable::SSTableBuilder builder(schema_, file_path);
 
     for (const auto& row : imm->data()) {
         builder.add(row);
     }
 
-    SSTableBuildResult build_result = builder.finish();
+    sstable::SSTableBuildResult build_result = builder.finish();
 
     // эти две переменные - захардкожено то, куда и в каком виде должно
     // попадать первый sstable при flush-е imm_memtabl-а
@@ -81,7 +81,6 @@ void LSMTree::flush_memtable() {
         .min_key = build_result.min_key,
         .max_key = build_result.max_key,
         .file_size_bytes = std::filesystem::file_size(file_path),
-        .meta_offset = build_result.meta_offset,
         .num_blocks = build_result.num_blocks,
         .layout = layout
     };

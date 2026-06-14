@@ -24,7 +24,6 @@ struct SSTableInfo {
 
     uint64_t file_size_bytes;
 
-    uint64_t meta_offset;
     uint32_t num_blocks;
 
     SSTLayout layout;

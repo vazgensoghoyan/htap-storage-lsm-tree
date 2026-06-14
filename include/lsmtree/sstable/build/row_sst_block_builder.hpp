@@ -5,11 +5,11 @@
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
 
-namespace htap::lsmtree {
+namespace htap::lsmtree::sstable {
 
 struct RowBlockMeta {
-    int64_t min_key;
-    int64_t max_key;
+    storage::Key min_key;
+    storage::Key max_key;
     uint32_t row_count;
     uint64_t offset;        // это сам заполняет SSTableBuilder
     uint64_t size_bytes;
@@ -54,4 +54,4 @@ private:
     static constexpr size_t TARGET_BLOCK_SIZE_BYTES = 4 * 1024; // 4 КБ
 };
 
-} // namespace htap::lsmtree
+} // namespace htap::lsmtree::sstable
