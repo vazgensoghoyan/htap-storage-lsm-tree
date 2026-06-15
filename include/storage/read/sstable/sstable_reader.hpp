@@ -2,7 +2,7 @@
 
 #include "storage/read/sstable/row_block_meta.hpp"
 #include "storage/read/sstable/column_block_meta.hpp"
-#include "lsmtree/sstable/sparse_index/sparse_index_entry.hpp"
+#include "lsmtree/sstable/format/sparse_index_entry.hpp"
 
 #include <cstdint>
 #include <filesystem>

@@ -3,8 +3,9 @@
 #include "lsmtree/sstable/metadata/sstable_registry.hpp"
 #include "lsmtree/sstable/metadata/sstable_info.hpp"
 
-using namespace htap::lsmtree;
 using namespace htap::storage;
+using namespace htap::lsmtree;
+using namespace htap::lsmtree::sstable;
 
 namespace {
 

@@ -6,6 +6,7 @@
 #include <format>
 
 #include "utils/logger.hpp"
+#include "lsmtree/sstable/format/sst_layout.hpp"
 #include "lsmtree/sstable/build/sstable_builder.hpp"
 #include "storage/cursor/active_memtable_cursor.hpp"
 #include "storage/cursor/immutable_memtable_cursor.hpp"
@@ -72,9 +73,9 @@ void LSMTree::flush_memtable() {
     // эти две переменные - захардкожено то, куда и в каком виде должно
     // попадать первый sstable при flush-е imm_memtabl-а
     uint32_t level = 0;
-    SSTLayout layout = SSTLayout::ROW;
+    sstable::SSTLayout layout = sstable::SSTLayout::ROW;
 
-    SSTableInfo info{
+    sstable::SSTableInfo info{
         .id = sst_id,
         .path = file_path,
         .level = level,

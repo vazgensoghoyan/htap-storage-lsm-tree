@@ -4,13 +4,9 @@
 #include <cstdint>
 
 #include "storage/api/types.hpp"
+#include "lsmtree/sstable/format/sst_layout.hpp"
 
-namespace htap::lsmtree {
-
-enum class SSTLayout : uint8_t {
-    ROW = 0,
-    COLUMN = 1
-};
+namespace htap::lsmtree::sstable {
 
 struct SSTableInfo {
     uint64_t id;
@@ -29,4 +25,4 @@ struct SSTableInfo {
     SSTLayout layout;
 };
 
-} // namespace htap::lsmtree
+} // namespace htap::lsmtree::sstable

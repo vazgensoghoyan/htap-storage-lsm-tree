@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "lsmtree/sstable/sparse_index/sparse_index_entry.hpp"
+#include "lsmtree/sstable/format/sparse_index_entry.hpp"
 #include "storage/read/sstable/key_range.hpp"
 #include "storage/read/sstable/row_block_meta.hpp"
 #include "storage/read/sstable/column_block_meta.hpp"

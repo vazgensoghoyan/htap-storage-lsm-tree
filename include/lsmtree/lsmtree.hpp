@@ -43,7 +43,7 @@ private:
 
     MemoryLayer memory_layer_;
 
-    SSTableRegistry registry_;
+    sstable::SSTableRegistry registry_;
 
     uint64_t next_sst_id_ = 0;
 };

@@ -13,7 +13,7 @@
 namespace htap::storage::read::sstable {
 
 std::unique_ptr<ICursor> make_sstable_cursor(
-    const lsmtree::SSTableInfo& info,
+    const lsmtree::sstable::SSTableInfo& info,
     const KeyRange& range,
     const std::vector<ValueType>& schema,
     const std::vector<std::size_t>& projection
@@ -34,7 +34,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
     }
 
     switch (info.layout) {
-        case lsmtree::SSTLayout::ROW: {
+        case lsmtree::sstable::SSTLayout::ROW: {
             auto candidates = reader->read_row_metadata_range(
                 selected_metadata_range.first_block_id,
                 selected_metadata_range.block_count
@@ -58,7 +58,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
             );
         }
         
-        case lsmtree::SSTLayout::COLUMN: {
+        case lsmtree::sstable::SSTLayout::COLUMN: {
             auto candidates = reader->read_column_metadata_range(
                 selected_metadata_range.first_block_id,
                 selected_metadata_range.block_count,

@@ -3,14 +3,15 @@
 #include <algorithm>
 #include <stdexcept>
 
-using namespace htap::lsmtree;
 using namespace htap::storage;
+using namespace htap::lsmtree;
+using namespace htap::lsmtree::sstable;
 
-size_t SSTableRegistry::level_count() const noexcept {
+size_t SSTableRegistry::level_count() const {
     return levels_.size();
 }
 
-size_t SSTableRegistry::sstable_count(uint32_t level) const noexcept {
+size_t SSTableRegistry::sstable_count(uint32_t level) const {
     if (level >= levels_.size())
         return 0;
 

@@ -3,13 +3,13 @@
 #include <limits>
 #include <stdexcept>
 
-#include "lsmtree/sstable/format/sstable_info.hpp"
 #include "lsmtree/sstable/format/sparse_index_entry.hpp"
+#include "lsmtree/sstable/format/sst_layout.hpp"
 
 #include "utils/logger.hpp"
 
-using namespace htap::lsmtree::sstable;
 using namespace htap::storage;
+using namespace htap::lsmtree::sstable;
 
 SSTableBuilder::SSTableBuilder(
     const Schema& schema,
@@ -89,7 +89,7 @@ void SSTableBuilder::flush_block() {
     // SPARSE INDEX
 
     if (block_id_ % sparse_index_step_ == 0) {
-        format::SparseIndexEntry sparse_idx_entry{
+        SparseIndexEntry sparse_idx_entry{
             .min_key = meta.min_key,
             .block_id = meta.block_id
         };
@@ -117,18 +117,10 @@ void SSTableBuilder::write_info_file() {
 
     utils::BinaryWriter writer(info_file);
 
-    format::SSTableInfo info;
-
-    info.num_blocks = block_id_;
-    info.min_key = global_min_;
-    info.max_key = global_max_;
-    info.layout_type = format::SSTLayout::ROW;
-
-    writer.write_u32(info.magic);
-    writer.write_u32(info.num_blocks);
-    writer.write_i64(info.min_key);
-    writer.write_i64(info.max_key);
-    writer.write_u8(static_cast<uint8_t>(info.layout_type));
+    writer.write_u32(block_id_);
+    writer.write_i64(global_min_);
+    writer.write_i64(global_max_);
+    writer.write_u8(static_cast<uint8_t>(SSTLayout::ROW));
 
     info_file.flush();
 }
