@@ -3,6 +3,7 @@
 #include "storage/read/sstable/row_block_meta.hpp"
 #include "storage/read/sstable/column_block_meta.hpp"
 #include "lsmtree/sstable/format/sparse_index_entry.hpp"
+#include "lsmtree/sstable/sstable_paths.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -54,7 +55,7 @@ private:
     std::filesystem::path metadata_path() const;
 
 private:
-    std::filesystem::path path_;
+    lsmtree::sstable::SSTablePaths paths_;
     std::ifstream input_;
 };
 

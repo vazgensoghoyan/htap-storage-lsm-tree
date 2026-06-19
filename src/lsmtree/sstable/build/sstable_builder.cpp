@@ -1,5 +1,6 @@
 #include "lsmtree/sstable/build/sstable_builder.hpp"
 
+#include <filesystem>
 #include <limits>
 #include <stdexcept>
 
@@ -18,9 +19,6 @@ SSTableBuilder::SSTableBuilder(
 )
     : schema_(schema)
     , paths_(sstable_dir)
-    , data_file_(paths_.data(), std::ios::binary)
-    , meta_file_(paths_.meta(), std::ios::binary)
-    , index_file_(paths_.index(), std::ios::binary)
     , data_writer_(data_file_)
     , meta_writer_(meta_file_)
     , index_writer_(index_file_)
@@ -31,6 +29,13 @@ SSTableBuilder::SSTableBuilder(
     , last_key_(0)
     , first_row_(true)
 {
+
+    std::filesystem::create_directories(paths_.dir());
+
+    data_file_.open(paths_.data(), std::ios::binary);
+    meta_file_.open(paths_.meta(), std::ios::binary);
+    index_file_.open(paths_.index(), std::ios::binary);
+
     if (!data_file_ || !meta_file_ || !index_file_)
         throw std::runtime_error("Failed to open SSTable file");
 

@@ -1,6 +1,7 @@
 #pragma once // lsmtree/sstable/sstable_paths.hpp
 
 #include <filesystem>
+#include <utility>
 
 namespace htap::lsmtree::sstable {
 
