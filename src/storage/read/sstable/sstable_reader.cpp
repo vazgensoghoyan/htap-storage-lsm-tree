@@ -25,34 +25,27 @@ T read_value(const std::vector<char>& data, std::size_t& pos) {
 }
 
 SSTableReader::SSTableReader(std::filesystem::path path)
-    : path_(std::move(path)) {
+    : paths_(std::move(path)) {
     input_.open(data_path(), std::ios::binary);
-
     if (!input_.is_open()) {
-        throw std::runtime_error("Cannot open SSTable file: " + data_path().string());
+        throw std::runtime_error("Cannot open SSTable data file: " + data_path().string());
     }
 }
 
 const std::filesystem::path& SSTableReader::path() const noexcept {
-    return path_;
+    return paths_.dir();
 }
 
 std::filesystem::path SSTableReader::data_path() const {
-    auto path = path_;
-    path.replace_extension(".sst");
-    return path;
+    return paths_.data();
 }
 
 std::filesystem::path SSTableReader::index_path() const {
-    auto path = path_;
-    path.replace_extension(".idx");
-    return path;
+    return paths_.index();
 }
 
 std::filesystem::path SSTableReader::metadata_path() const {
-    auto path = path_;
-    path.replace_extension(".meta");
-    return path;
+    return paths_.meta();
 }
 
 std::vector<char> SSTableReader::read_block(const RowBlockMeta& block) {

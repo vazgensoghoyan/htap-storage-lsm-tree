@@ -8,6 +8,7 @@
 #include "utils/logger.hpp"
 #include "lsmtree/sstable/format/sst_layout.hpp"
 #include "lsmtree/sstable/build/sstable_builder.hpp"
+#include "lsmtree/sstable/sstable_paths.hpp"
 #include "storage/cursor/active_memtable_cursor.hpp"
 #include "storage/cursor/immutable_memtable_cursor.hpp"
 #include "storage/cursor/cursor_factory.hpp"
@@ -27,6 +28,22 @@ std::vector<ValueType> extract_schema_types(const Schema& schema) {
     }
 
     return types;
+}
+
+std::uint64_t file_size_if_exists(const std::filesystem::path& path) {
+    if (!std::filesystem::exists(path)) {
+        return 0;
+    }
+    return std::filesystem::file_size(path);
+}
+
+std::uint64_t sstable_size_bytes(const std::filesystem::path& sstable_dir) {
+    htap::lsmtree::sstable::SSTablePaths paths(sstable_dir);
+
+    return file_size_if_exists(paths.data())
+        + file_size_if_exists(paths.meta())
+        + file_size_if_exists(paths.index())
+        + file_size_if_exists(paths.info());
 }
 
 }
@@ -81,7 +98,7 @@ void LSMTree::flush_memtable() {
         .level = level,
         .min_key = build_result.min_key,
         .max_key = build_result.max_key,
-        .file_size_bytes = std::filesystem::file_size(file_path),
+        .file_size_bytes = sstable_size_bytes(file_path),
         .num_blocks = build_result.num_blocks,
         .layout = layout
     };
