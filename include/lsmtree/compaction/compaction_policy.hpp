@@ -24,7 +24,7 @@ public:
     std::optional<CompactionTask> pick(const sstable::SSTableRegistry& registry) const;
 
 private:
-    const StorageConfig& config_;
+    StorageConfig config_;
 };
 
 } // namespace htap::lsmtree
