@@ -3,6 +3,7 @@
 #include "storage/model/schema.hpp"
 #include "storage/api/types.hpp"
 #include "storage/api/cursor_interface.hpp"
+#include "storage/read/data_skipping_filter.hpp"
 #include "storage/read/sstable/key_range.hpp"
 
 #include "lsmtree/mem/memory_layer.hpp"
@@ -27,7 +28,8 @@ public:
     std::unique_ptr<storage::ICursor> scan(
         const storage::read::sstable::KeyRange& range,
         const std::vector<std::size_t>& projection,
-        storage::ScanOrder order
+        storage::ScanOrder order,
+        const storage::read::DataSkippingFilter& data_skipping_filter = {}
     ) const;
 
     const storage::Schema& schema() const noexcept;

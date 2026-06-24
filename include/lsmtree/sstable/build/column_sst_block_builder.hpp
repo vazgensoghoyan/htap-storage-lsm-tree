@@ -5,6 +5,7 @@
 
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
+#include "storage/read/sstable/numeric_stats.hpp"
 
 namespace htap::lsmtree::sstable {
 
@@ -21,6 +22,7 @@ struct ColumnBlockMeta {
 struct ColumnSSTBlockResult {
     std::vector<uint8_t> data;
     ColumnBlockMeta meta;
+    std::vector<storage::read::sstable::NumericBlockStats> numeric_stats;
 };
 
 class ColumnSSTBlockBuilder {
@@ -37,6 +39,8 @@ public:
 
 private:
     void encode_value(const storage::NullableValue& value);
+    void reset_numeric_stats();
+    void update_numeric_stats(const storage::NullableValue& value);
 
 private:
     const storage::Column& column_;
@@ -55,6 +59,8 @@ private:
     uint32_t values_count_;
 
     bool full_;
+
+    std::vector<storage::read::sstable::NumericBlockStats> numeric_stats_;
 
     static constexpr size_t TARGET_BLOCK_SIZE_BYTES = 4 * 1024; // 4 KB
 };

@@ -124,7 +124,8 @@ std::unique_ptr<ICursor> LSMStorageEngine::scan(
     std::optional<Key> from,
     std::optional<Key> to,
     const std::vector<std::size_t>& projection,
-    ScanOrder order
+    ScanOrder order,
+    const read::DataSkippingFilter& data_skipping_filter
 ) const {
     const auto& tree = get_tree(table_name);
 
@@ -138,7 +139,8 @@ std::unique_ptr<ICursor> LSMStorageEngine::scan(
     return tree.scan(
         range,
         projection,
-        order
+        order,
+        data_skipping_filter
     );
 }
 

@@ -43,7 +43,8 @@ std::uint64_t sstable_size_bytes(const std::filesystem::path& sstable_dir) {
     return file_size_if_exists(paths.data())
         + file_size_if_exists(paths.meta())
         + file_size_if_exists(paths.index())
-        + file_size_if_exists(paths.info());
+        + file_size_if_exists(paths.info())
+        + file_size_if_exists(paths.stats());
 }
 
 }
@@ -115,7 +116,8 @@ std::string LSMTree::build_sst_path(uint64_t id) const {
 std::unique_ptr<ICursor> LSMTree::scan(
     const storage::read::sstable::KeyRange& range,
     const std::vector<std::size_t>& projection,
-    storage::ScanOrder order
+    storage::ScanOrder order,
+    const storage::read::DataSkippingFilter& data_skipping_filter
 ) const {
     std::vector<std::unique_ptr<ICursor>> cursors;
 
@@ -163,7 +165,8 @@ std::unique_ptr<ICursor> LSMTree::scan(
                 info,
                 range,
                 schema_types,
-                projection
+                projection,
+                data_skipping_filter
             );
 
             if (cursor && cursor->valid()) {

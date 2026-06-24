@@ -727,6 +727,8 @@ Executor::SelectCursorBuildResult Executor::BuildCursorForSelect(
         CollectConjuncts(*statement.where_expression, conjuncts);
     }
 
+    const auto data_skipping_filter = BuildDataSkippingFilter(statement);
+
     std::optional<storage::Key> point_key;
     bool found_point_lookup = false;
 
@@ -881,7 +883,8 @@ Executor::SelectCursorBuildResult Executor::BuildCursorForSelect(
             from,
             to,
             projection,
-            order
+            order,
+            data_skipping_filter
         );
         return build_result;
     }
@@ -891,10 +894,128 @@ Executor::SelectCursorBuildResult Executor::BuildCursorForSelect(
         std::nullopt,
         std::nullopt,
         projection,
-        order
+        order,
+        data_skipping_filter
     );
 
     return build_result;
+}
+
+storage::read::DataSkippingFilter Executor::BuildDataSkippingFilter(
+    const BoundSelectStatement& statement
+) const {
+    storage::read::DataSkippingFilter filter;
+
+    if (!statement.where_expression || !statement.schema) {
+        return filter;
+    }
+
+    std::vector<const BoundExpression*> conjuncts;
+    CollectConjuncts(*statement.where_expression, conjuncts);
+
+    auto is_numeric_literal = [](const BoundLiteralExpression& literal) {
+        if (!literal.value.has_value()) {
+            return false;
+        }
+
+        return std::holds_alternative<std::int64_t>(*literal.value) ||
+            std::holds_alternative<double>(*literal.value);
+    };
+
+    auto to_numeric_value = [](const BoundLiteralExpression& literal) -> storage::read::NumericPredicateValue {
+        if (const auto* int_value = std::get_if<std::int64_t>(&*literal.value)) {
+            return *int_value;
+        }
+
+        return std::get<double>(*literal.value);
+    };
+
+    auto convert_operation = [](parser::BinaryOperation operation) -> std::optional<storage::read::NumericComparisonOp> {
+        switch (operation) {
+            case parser::BinaryOperation::Equal:
+                return storage::read::NumericComparisonOp::Equal;
+            case parser::BinaryOperation::Less:
+                return storage::read::NumericComparisonOp::Less;
+            case parser::BinaryOperation::LessEqual:
+                return storage::read::NumericComparisonOp::LessEqual;
+            case parser::BinaryOperation::Greater:
+                return storage::read::NumericComparisonOp::Greater;
+            case parser::BinaryOperation::GreaterEqual:
+                return storage::read::NumericComparisonOp::GreaterEqual;
+            default:
+                return std::nullopt;
+        }
+    };
+
+    auto reverse_operation = [](storage::read::NumericComparisonOp operation) {
+        switch (operation) {
+            case storage::read::NumericComparisonOp::Equal:
+                return storage::read::NumericComparisonOp::Equal;
+            case storage::read::NumericComparisonOp::Less:
+                return storage::read::NumericComparisonOp::Greater;
+            case storage::read::NumericComparisonOp::LessEqual:
+                return storage::read::NumericComparisonOp::GreaterEqual;
+            case storage::read::NumericComparisonOp::Greater:
+                return storage::read::NumericComparisonOp::Less;
+            case storage::read::NumericComparisonOp::GreaterEqual:
+                return storage::read::NumericComparisonOp::LessEqual;
+        }
+
+        return storage::read::NumericComparisonOp::Equal;
+    };
+
+    for (const BoundExpression* conjunct : conjuncts) {
+        if (conjunct->kind != BoundExpressionKind::Binary) {
+            continue;
+        }
+
+        const auto& binary = static_cast<const BoundBinaryExpression&>(*conjunct);
+        auto operation = convert_operation(binary.operation);
+        if (!operation.has_value()) {
+            continue;
+        }
+
+        const BoundColumnExpression* column = nullptr;
+        const BoundLiteralExpression* literal = nullptr;
+        bool column_on_left = true;
+
+        if (binary.left->kind == BoundExpressionKind::Column &&
+            binary.right->kind == BoundExpressionKind::Literal) {
+            column = static_cast<const BoundColumnExpression*>(binary.left.get());
+            literal = static_cast<const BoundLiteralExpression*>(binary.right.get());
+            column_on_left = true;
+        } else if (binary.left->kind == BoundExpressionKind::Literal &&
+            binary.right->kind == BoundExpressionKind::Column) {
+            literal = static_cast<const BoundLiteralExpression*>(binary.left.get());
+            column = static_cast<const BoundColumnExpression*>(binary.right.get());
+            column_on_left = false;
+        } else {
+            continue;
+        }
+
+        if (!is_numeric_literal(*literal)) {
+            continue;
+        }
+
+        if (column->column_index >= statement.schema->size()) {
+            continue;
+        }
+
+        const auto& schema_column = statement.schema->get_column(column->column_index);
+        if (schema_column.is_key || (
+            schema_column.type != storage::ValueType::INT64 &&
+            schema_column.type != storage::ValueType::DOUBLE)) {
+            continue;
+        }
+
+        filter.predicates.push_back(storage::read::NumericColumnPredicate{
+            .column_idx = column->column_index,
+            .op = column_on_left ? *operation : reverse_operation(*operation),
+            .value = to_numeric_value(*literal)
+        });
+    }
+
+    return filter;
 }
 
 bool Executor::EvaluatePredicate(const BoundExpression& expression, const storage::ICursor& cursor) const {
