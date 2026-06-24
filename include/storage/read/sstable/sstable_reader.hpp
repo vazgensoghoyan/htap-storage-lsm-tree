@@ -3,19 +3,25 @@
 #include "storage/read/sstable/row_block_meta.hpp"
 #include "storage/read/sstable/column_block_meta.hpp"
 #include "storage/read/sstable/numeric_stats.hpp"
+#include "storage/read/sstable/sstable_block_cache.hpp"
 #include "lsmtree/sstable/format/sparse_index_entry.hpp"
 #include "lsmtree/sstable/sstable_paths.hpp"
 
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <vector>
 
 namespace htap::storage::read::sstable {
 
 class SSTableReader final {
 public:
-    explicit SSTableReader(std::filesystem::path path);
+    explicit SSTableReader(
+        std::filesystem::path path,
+        std::shared_ptr<SSTableBlockCache> block_cache = nullptr,
+        std::uint64_t sstable_id = 0
+    );
 
     const std::filesystem::path& path() const noexcept;
 
@@ -73,6 +79,8 @@ private:
 private:
     lsmtree::sstable::SSTablePaths paths_;
     std::ifstream input_;
+    std::shared_ptr<SSTableBlockCache> block_cache_;
+    std::uint64_t sstable_id_ = 0;
 
     bool numeric_stats_index_loaded_ = false;
     bool numeric_stats_file_exists_ = false;

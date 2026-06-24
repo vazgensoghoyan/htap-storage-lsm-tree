@@ -31,8 +31,14 @@ T read_value(const std::vector<char>& data, std::size_t& pos) {
 
 }
 
-SSTableReader::SSTableReader(std::filesystem::path path)
-    : paths_(std::move(path)) {
+SSTableReader::SSTableReader(
+    std::filesystem::path path,
+    std::shared_ptr<SSTableBlockCache> block_cache,
+    std::uint64_t sstable_id
+)
+    : paths_(std::move(path)),
+    block_cache_(std::move(block_cache)),
+    sstable_id_(sstable_id) {
     input_.open(data_path(), std::ios::binary);
     if (!input_.is_open()) {
         throw std::runtime_error("Cannot open SSTable data file: " + data_path().string());
@@ -60,10 +66,30 @@ std::filesystem::path SSTableReader::stats_path() const {
 }
 
 std::vector<char> SSTableReader::read_block(const RowBlockMeta& block) {
+    if (block_cache_) {
+        return block_cache_->read_row_block(
+            sstable_id_,
+            block,
+            [&]() {
+                return read_data_bytes(block.offset, block.size);
+            }
+        );
+    }
+
     return read_data_bytes(block.offset, block.size);
 }
 
 std::vector<char> SSTableReader::read_block(const ColumnBlockMeta& block) {
+    if (block_cache_) {
+        return block_cache_->read_column_block(
+            sstable_id_,
+            block,
+            [&]() {
+                return read_data_bytes(block.offset, block.size);
+            }
+        );
+    }
+
     return read_data_bytes(block.offset, block.size);
 }
 

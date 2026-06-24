@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <limits>
 #include <format>
+#include <utility>
 
 #include "utils/logger.hpp"
 #include "lsmtree/sstable/format/sst_layout.hpp"
@@ -163,10 +164,12 @@ std::unique_ptr<ICursor> LSMTree::scan(
 
         for (const auto& info : sstables) {
             auto& metadata_cache = get_or_create_metadata_cache(info);
+            auto block_cache = get_or_create_block_cache();
 
             auto cursor = read::sstable::make_sstable_cursor(
                 info,
                 metadata_cache,
+                std::move(block_cache),
                 range,
                 schema_types,
                 projection,
@@ -206,4 +209,13 @@ htap::storage::read::sstable::SSTableMetadataCache& LSMTree::get_or_create_metad
     );
 
     return *inserted_it->second;
+}
+
+std::shared_ptr<htap::storage::read::sstable::SSTableBlockCache>
+LSMTree::get_or_create_block_cache() const {
+    if (!sstable_block_cache_) {
+        sstable_block_cache_ = std::make_shared<storage::read::sstable::SSTableBlockCache>();
+    }
+
+    return sstable_block_cache_;
 }
