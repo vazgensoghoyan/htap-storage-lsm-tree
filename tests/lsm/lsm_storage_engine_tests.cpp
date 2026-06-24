@@ -76,7 +76,7 @@ std::vector<Key> CollectKeys(ICursor& cursor) {
 TEST(LSMStorageEngineTest, CreateTableStoresSchema) {
     const auto dir = MakeTempDir("create_table_stores_schema");
 
-    LSMStorageEngine storage(dir.string());
+    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
 
     storage.create_table("users", MakeSchema());
 
@@ -96,7 +96,7 @@ TEST(LSMStorageEngineTest, CreateTableStoresSchema) {
 TEST(LSMStorageEngineTest, ScanReturnsInsertedRows) {
     const auto dir = MakeTempDir("scan_returns_inserted_rows");
 
-    LSMStorageEngine storage(dir.string());
+    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
     storage.create_table("users", MakeSchema());
 
     storage.insert("users", MakeRow(3, 30, "c"));
@@ -119,7 +119,7 @@ TEST(LSMStorageEngineTest, ScanReturnsInsertedRows) {
 TEST(LSMStorageEngineTest, ScanRespectsRange) {
     const auto dir = MakeTempDir("scan_respects_range");
 
-    LSMStorageEngine storage(dir.string());
+    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
     storage.create_table("users", MakeSchema());
 
     storage.insert("users", MakeRow(1, 10, "a"));
@@ -143,7 +143,7 @@ TEST(LSMStorageEngineTest, ScanRespectsRange) {
 TEST(LSMStorageEngineTest, GetReturnsSingleExistingRow) {
     const auto dir = MakeTempDir("get_returns_single_existing_row");
 
-    LSMStorageEngine storage(dir.string());
+    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
     storage.create_table("users", MakeSchema());
 
     storage.insert("users", MakeRow(1, 10, "a"));
@@ -170,7 +170,7 @@ TEST(LSMStorageEngineTest, GetReturnsSingleExistingRow) {
 TEST(LSMStorageEngineTest, GetMissingKeyReturnsEmptyCursor) {
     const auto dir = MakeTempDir("get_missing_key_returns_empty_cursor");
 
-    LSMStorageEngine storage(dir.string());
+    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
     storage.create_table("users", MakeSchema());
 
     storage.insert("users", MakeRow(1, 10, "a"));
@@ -186,7 +186,7 @@ TEST(LSMStorageEngineTest, GetMissingKeyReturnsEmptyCursor) {
 TEST(LSMStorageEngineTest, ProjectionAllowsReadingSelectedColumns) {
     const auto dir = MakeTempDir("projection_allows_reading_selected_columns");
 
-    LSMStorageEngine storage(dir.string());
+    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
     storage.create_table("users", MakeSchema());
 
     storage.insert("users", MakeRow(1, 10, "a"));
@@ -218,7 +218,7 @@ TEST(LSMStorageEngineTest, ProjectionAllowsReadingSelectedColumns) {
 TEST(LSMStorageEngineTest, ThrowsForMissingTable) {
     const auto dir = MakeTempDir("throws_for_missing_table");
 
-    LSMStorageEngine storage(dir.string());
+    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
 
     EXPECT_THROW(
         storage.scan("missing", std::nullopt, std::nullopt, {0}, ScanOrder::Unordered),

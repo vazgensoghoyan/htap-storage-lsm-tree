@@ -7,7 +7,8 @@
 
 #include "storage/read/sstable/key_range.hpp"
 
-namespace htap::storage {
+using namespace htap::storage;
+
 namespace {
 
 void validate_projection(
@@ -48,11 +49,12 @@ void validate_row(const Schema& schema, const Row& values) {
 
 }
 
-} 
+} // namespace
 
-LSMStorageEngine::LSMStorageEngine(std::string root_path, std::size_t memtable_threshold_)
-    : root_path_(std::move(root_path)),
-    memtable_threshold_(memtable_threshold_)
+LSMStorageEngine::LSMStorageEngine(htap::lsmtree::StorageConfig config)
+    : root_path_(config.root_path)
+    , memtable_threshold_(config.memtable_threshold)
+    , config_(std::move(config))
 {
     std::filesystem::create_directories(root_path_);
 }
@@ -67,9 +69,12 @@ void LSMStorageEngine::create_table(
 
     const std::string path = table_path(table_name);
 
+    htap::lsmtree::StorageConfig table_config = config_;
+    table_config.root_path = path;
+
     tables_.emplace(
         table_name,
-        std::make_unique<htap::lsmtree::LSMTree>(schema, path, memtable_threshold_)
+        std::make_unique<htap::lsmtree::LSMTree>(schema, table_config)
     );
 }
 
@@ -165,5 +170,3 @@ const htap::lsmtree::LSMTree& LSMStorageEngine::get_tree(const std::string& tabl
 std::string LSMStorageEngine::table_path(const std::string& table_name) const {
     return (std::filesystem::path(root_path_) / table_name).string();
 }
-
-} 
