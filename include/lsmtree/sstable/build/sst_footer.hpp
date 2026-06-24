@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <cstddef>
 
+#include "storage/api/types.hpp"
+
 namespace htap::lsmtree::sstable {
 
 static constexpr uint8_t ROW_LAYOUT = 0;

@@ -9,7 +9,7 @@
 #include "utils/logger.hpp"
 
 #include "lsmtree/compaction/compaction_job.hpp"
-#include "lsmtree/sstable/build/sstable_builder.hpp"
+#include "lsmtree/sstable/build/row_sstable_builder.hpp"
 #include "lsmtree/sstable/format/sst_layout.hpp"
 #include "lsmtree/sstable/metadata/sstable_manifest.hpp"
 #include "lsmtree/sstable/sstable_paths.hpp"
@@ -129,7 +129,7 @@ void LSMTree::flush_memtable() {
 
     LOG_INFO("Flushing SSTable id={} to {}", sst_id, sst_path);
 
-    sstable::SSTableBuilder builder(schema_, sst_path);
+    sstable::RowSSTableBuilder builder(schema_, sst_path);
     for (const auto& row : imm->data()) {
         builder.add(row);
     }

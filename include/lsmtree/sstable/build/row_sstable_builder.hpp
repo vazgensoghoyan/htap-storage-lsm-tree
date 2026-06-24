@@ -14,9 +14,9 @@
 
 namespace htap::lsmtree::sstable {
 
-class SSTableBuilder {
+class RowSSTableBuilder {
 public:
-    SSTableBuilder(
+    RowSSTableBuilder(
         const storage::Schema& schema,
         const std::filesystem::path& sstable_dir,
         uint32_t sparse_index_step = 1000 // TODO
