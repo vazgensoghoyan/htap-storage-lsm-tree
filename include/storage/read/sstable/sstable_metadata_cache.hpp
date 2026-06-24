@@ -1,13 +1,15 @@
 #pragma once
 
 #include "lsmtree/sstable/metadata/sstable_info.hpp"
-#include "lsmtree/sstable/sparse_index/sparse_index_entry.hpp"
+#include "lsmtree/sstable/format/sparse_index_entry.hpp"
 #include "storage/read/sstable/column_block_meta.hpp"
+#include "storage/read/sstable/numeric_stats.hpp"
 #include "storage/read/sstable/row_block_meta.hpp"
 #include "storage/read/sstable/sstable_reader.hpp"
 
 #include <cstdint>
 #include <list>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -16,10 +18,10 @@ namespace htap::storage::read::sstable {
 class SSTableMetadataCache final {
 public:
     SSTableMetadataCache(
-        const lsmtree::SSTableInfo& info,
+        const lsmtree::sstable::SSTableInfo& info,
         std::uint32_t columns_count,
         std::uint32_t page_blocks = 256,
-        std::size_t max_cached_pages = 64
+        std::size_t max_cached_bytes = 4 * 1024 * 1024
     );
 
     const std::vector<lsmtree::sstable::SparseIndexEntry>& sparse_index() const noexcept;
@@ -34,43 +36,80 @@ public:
         std::uint32_t block_count
     );
 
+    NumericStatsRange read_numeric_stats_range(
+        std::uint32_t first_block_id,
+        std::uint32_t block_count,
+        const std::vector<std::size_t>& column_indices
+    );
+
 private:
+    enum class PageKind {
+        RowMetadata,
+        ColumnMetadata,
+        NumericStats
+    };
+
+    struct CacheKey {
+        PageKind kind = PageKind::RowMetadata;
+        std::uint32_t page_id = 0;
+        std::size_t column_idx = 0;
+
+        bool operator==(const CacheKey& other) const noexcept {
+            return kind == other.kind &&
+                page_id == other.page_id &&
+                column_idx == other.column_idx;
+        }
+    };
+
+    struct CacheKeyHash {
+        std::size_t operator()(const CacheKey& key) const noexcept;
+    };
+
     struct RowPage {
         std::vector<RowBlockMeta> blocks;
-        std::list<std::uint32_t>::iterator lru_it;
+        std::list<CacheKey>::iterator lru_it;
+        std::size_t bytes = 0;
     };
 
     struct ColumnPage {
         std::vector<ColumnBlockMeta> blocks;
-        std::list<std::uint32_t>::iterator lru_it;
+        std::list<CacheKey>::iterator lru_it;
+        std::size_t bytes = 0;
+    };
+
+    struct StatsPage {
+        std::optional<std::vector<NumericBlockStats>> blocks;
+        std::list<CacheKey>::iterator lru_it;
+        std::size_t bytes = 0;
     };
 
     std::vector<RowBlockMeta>& get_row_page(std::uint32_t page_id);
     std::vector<ColumnBlockMeta>& get_column_page(std::uint32_t page_id);
+    StatsPage& get_stats_page(std::size_t column_idx, std::uint32_t page_id);
 
-    void touch_row_page(std::uint32_t page_id, RowPage& page);
-    void touch_column_page(std::uint32_t page_id, ColumnPage& page);
+    void touch_page(const CacheKey& key, std::list<CacheKey>::iterator& lru_it);
 
-    void evict_row_if_needed();
-    void evict_column_if_needed();
+    void insert_lru_front(const CacheKey& key, std::list<CacheKey>::iterator& lru_it);
+    void evict_if_needed();
+    void evict_page(const CacheKey& key);
 
     std::uint32_t page_first_block(std::uint32_t page_id) const;
     std::uint32_t page_block_count(std::uint32_t page_id) const;
 
 private:
-    lsmtree::SSTableInfo info_;
+    lsmtree::sstable::SSTableInfo info_;
     std::uint32_t columns_count_;
     std::uint32_t page_blocks_;
-    std::size_t max_cached_pages_;
+    std::size_t max_cached_bytes_;
+    std::size_t cached_bytes_ = 0;
 
     SSTableReader reader_;
     std::vector<lsmtree::sstable::SparseIndexEntry> sparse_index_;
 
-    std::list<std::uint32_t> row_lru_;
+    std::list<CacheKey> lru_;
     std::unordered_map<std::uint32_t, RowPage> row_pages_;
-
-    std::list<std::uint32_t> column_lru_;
     std::unordered_map<std::uint32_t, ColumnPage> column_pages_;
+    std::unordered_map<CacheKey, StatsPage, CacheKeyHash> stats_pages_;
 };
 
 } 
