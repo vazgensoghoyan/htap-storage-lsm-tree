@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "storage/api/storage_engine_interface.hpp"
+#include "storage/read/data_skipping_filter.hpp"
 #include "executor/execution_result.hpp"
 #include "executor/bound_statement.hpp"
 
@@ -68,6 +69,10 @@ private:
         const BoundSelectStatement& statement,
         const std::vector<std::size_t>& projection,
         bool requires_key_asc
+    ) const;
+
+    storage::read::DataSkippingFilter BuildDataSkippingFilter(
+        const BoundSelectStatement& statement
     ) const;
 
 private:
