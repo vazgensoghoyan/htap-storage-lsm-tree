@@ -41,7 +41,7 @@ private:
     std::string build_sst_path(uint64_t sst_id) const;
 
     htap::storage::read::sstable::SSTableMetadataCache& get_or_create_metadata_cache(
-        const SSTableInfo& info
+        const sstable::SSTableInfo& info
     ) const;
 
 private:

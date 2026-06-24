@@ -187,7 +187,7 @@ std::unique_ptr<ICursor> LSMTree::scan(
 }
 
 htap::storage::read::sstable::SSTableMetadataCache& LSMTree::get_or_create_metadata_cache(
-    const SSTableInfo& info
+    const sstable::SSTableInfo& info
 ) const {
     auto it = sstable_metadata_caches_.find(info.id);
 

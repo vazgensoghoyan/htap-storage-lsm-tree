@@ -51,7 +51,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
             );
 
             if (!filtered_blocks.empty() && !data_skipping_filter.empty()) {
-                const auto stats = reader->read_numeric_stats_range(
+                const auto stats = metadata_cache.read_numeric_stats_range(
                     selected_metadata_range.first_block_id,
                     selected_metadata_range.block_count,
                     data_skipping_filter.referenced_columns()
@@ -81,8 +81,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
         case lsmtree::sstable::SSTLayout::COLUMN: {
             auto candidates = metadata_cache.read_column_metadata_range(
                 selected_metadata_range.first_block_id,
-                selected_metadata_range.block_count,
-                static_cast<std::uint32_t>(schema.size())
+                selected_metadata_range.block_count
             );
 
             auto filtered_blocks = selector.filter_candidate_column_blocks(
@@ -101,7 +100,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
                     }
                 }
 
-                const auto stats = reader->read_numeric_stats_range(
+                const auto stats = metadata_cache.read_numeric_stats_range(
                     selected_metadata_range.first_block_id,
                     selected_metadata_range.block_count,
                     data_skipping_filter.referenced_columns()
