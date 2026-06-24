@@ -5,6 +5,7 @@
 
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
+#include "storage/read/sstable/numeric_stats.hpp"
 
 #include "lsmtree/sstable/build/row_sst_block_builder.hpp"
 #include "lsmtree/sstable/build/sst_footer.hpp"
@@ -36,6 +37,7 @@ private:
     void flush_block();
 
     void write_info_file();
+    void write_stats_file();
 
 private:
     const storage::Schema& schema_;
@@ -51,6 +53,7 @@ private:
     utils::BinaryWriter index_writer_;
 
     RowSSTBlockBuilder block_builder_;
+    std::vector<std::vector<storage::read::sstable::NumericBlockStats>> block_numeric_stats_;
 
     uint32_t sparse_index_step_;
 

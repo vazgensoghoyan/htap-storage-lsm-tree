@@ -77,6 +77,7 @@ TEST(SSTableBuilderTest, CreatesAllFiles) {
     ASSERT_TRUE(std::filesystem::exists(dir / "meta.bin"));
     ASSERT_TRUE(std::filesystem::exists(dir / "sparse.idx"));
     ASSERT_TRUE(std::filesystem::exists(dir / "info.bin"));
+    ASSERT_TRUE(std::filesystem::exists(dir / "stats.bin"));
 }
 
 // 2. Sorted order enforcement

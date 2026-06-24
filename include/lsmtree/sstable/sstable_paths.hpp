@@ -19,6 +19,8 @@ public:
 
     std::filesystem::path info() const { return dir_ / "info.bin"; }
 
+    std::filesystem::path stats() const { return dir_ / "stats.bin"; }
+
 private:
     std::filesystem::path dir_;
 };
