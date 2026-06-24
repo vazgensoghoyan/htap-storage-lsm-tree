@@ -18,12 +18,17 @@ namespace htap::storage::read::sstable {
 std::unique_ptr<ICursor> make_sstable_cursor(
     const lsmtree::sstable::SSTableInfo& info,
     SSTableMetadataCache& metadata_cache,
+    std::shared_ptr<SSTableBlockCache> block_cache,
     const KeyRange& range,
     const std::vector<ValueType>& schema,
     const std::vector<std::size_t>& projection,
     const read::DataSkippingFilter& data_skipping_filter
 ) {
-    std::unique_ptr<SSTableReader> reader = std::make_unique<SSTableReader>(info.path);
+    std::unique_ptr<SSTableReader> reader = std::make_unique<SSTableReader>(
+        info.path,
+        std::move(block_cache),
+        info.id
+    );
     SparseBlockSelector selector;
 
     const auto& sparse_index = metadata_cache.sparse_index();

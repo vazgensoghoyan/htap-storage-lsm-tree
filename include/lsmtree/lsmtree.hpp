@@ -4,6 +4,7 @@
 #include "storage/api/types.hpp"
 #include "storage/api/cursor_interface.hpp"
 #include "storage/read/data_skipping_filter.hpp"
+#include "storage/read/sstable/sstable_block_cache.hpp"
 #include "storage/read/sstable/key_range.hpp"
 #include "storage/read/sstable/sstable_metadata_cache.hpp"
 
@@ -44,6 +45,8 @@ private:
         const sstable::SSTableInfo& info
     ) const;
 
+    std::shared_ptr<storage::read::sstable::SSTableBlockCache> get_or_create_block_cache() const;
+
 private:
     storage::Schema schema_;
 
@@ -59,6 +62,8 @@ private:
         std::uint64_t,
         std::unique_ptr<storage::read::sstable::SSTableMetadataCache>
     > sstable_metadata_caches_;
+
+    mutable std::shared_ptr<storage::read::sstable::SSTableBlockCache> sstable_block_cache_;
 };
 
 } // namespace htap::lsmtree
