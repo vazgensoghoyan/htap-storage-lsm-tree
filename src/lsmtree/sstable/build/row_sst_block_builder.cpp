@@ -1,6 +1,7 @@
 #include "lsmtree/sstable/build/row_sst_block_builder.hpp"
 
 #include <cstring>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 
@@ -22,6 +23,7 @@ void RowSSTBlockBuilder::reset() {
 
     row_count_ = 0;
     full_ = false;
+    reset_numeric_stats();
 }
 
 bool RowSSTBlockBuilder::full() const {
@@ -47,7 +49,8 @@ RowSSTBlockResult RowSSTBlockBuilder::finish() {
 
     RowSSTBlockResult result{
         .data = std::move(buffer_),
-        .meta = meta
+        .meta = meta,
+        .numeric_stats = std::move(numeric_stats_)
     };
 
     reset();
@@ -66,6 +69,7 @@ void RowSSTBlockBuilder::add(const Row& row) {
     max_key_ = std::max(key, max_key_);
 
     encode_row(row);
+    update_numeric_stats(row);
     row_count_++;
 
     if (buffer_.size() >= TARGET_BLOCK_SIZE_BYTES)
@@ -139,5 +143,75 @@ void RowSSTBlockBuilder::encode_row(const Row& row) {
     // values
     for (size_t i = 1; i < schema_.size(); ++i) {
         write_value_by_type(buffer_, row[i], schema_.get_column(i).type);
+    }
+}
+
+void RowSSTBlockBuilder::reset_numeric_stats() {
+    numeric_stats_.clear();
+
+    for (std::size_t column_idx = 0; column_idx < schema_.size(); ++column_idx) {
+        const auto& column = schema_.get_column(column_idx);
+
+        if (column.is_key || !storage::read::sstable::is_numeric_type(column.type)) {
+            continue;
+        }
+
+        storage::read::sstable::NumericStatsValue zero = std::int64_t{0};
+        if (column.type == ValueType::DOUBLE) {
+            zero = 0.0;
+        }
+
+        numeric_stats_.push_back(storage::read::sstable::NumericBlockStats{
+            .column_idx = column_idx,
+            .type = column.type,
+            .has_value = false,
+            .min_value = zero,
+            .max_value = zero
+        });
+    }
+}
+
+void RowSSTBlockBuilder::update_numeric_stats(const Row& row) {
+    for (auto& stats : numeric_stats_) {
+        if (stats.column_idx >= row.size()) {
+            throw std::runtime_error("RowSSTBlockBuilder: row size mismatch schema");
+        }
+
+        const auto& value = row[stats.column_idx];
+        if (!value.has_value()) {
+            continue;
+        }
+
+        if (stats.type == ValueType::INT64) {
+            const auto current = std::get<std::int64_t>(*value);
+
+            if (!stats.has_value) {
+                stats.min_value = current;
+                stats.max_value = current;
+                stats.has_value = true;
+                continue;
+            }
+
+            stats.min_value = std::min(std::get<std::int64_t>(stats.min_value), current);
+            stats.max_value = std::max(std::get<std::int64_t>(stats.max_value), current);
+            continue;
+        }
+
+        if (stats.type == ValueType::DOUBLE) {
+            const auto current = std::get<double>(*value);
+            if (std::isnan(current)) {
+                continue;
+            }
+
+            if (!stats.has_value) {
+                stats.min_value = current;
+                stats.max_value = current;
+                stats.has_value = true;
+                continue;
+            }
+
+            stats.min_value = std::min(std::get<double>(stats.min_value), current);
+            stats.max_value = std::max(std::get<double>(stats.max_value), current);
+        }
     }
 }
