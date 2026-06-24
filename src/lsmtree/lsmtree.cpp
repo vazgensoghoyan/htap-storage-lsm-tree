@@ -6,7 +6,9 @@
 #include <format>
 
 #include "utils/logger.hpp"
+#include "lsmtree/sstable/format/sst_layout.hpp"
 #include "lsmtree/sstable/build/sstable_builder.hpp"
+#include "lsmtree/sstable/sstable_paths.hpp"
 #include "storage/cursor/active_memtable_cursor.hpp"
 #include "storage/cursor/immutable_memtable_cursor.hpp"
 #include "storage/cursor/cursor_factory.hpp"
@@ -27,6 +29,23 @@ std::vector<ValueType> extract_schema_types(const Schema& schema) {
     }
 
     return types;
+}
+
+std::uint64_t file_size_if_exists(const std::filesystem::path& path) {
+    if (!std::filesystem::exists(path)) {
+        return 0;
+    }
+    return std::filesystem::file_size(path);
+}
+
+std::uint64_t sstable_size_bytes(const std::filesystem::path& sstable_dir) {
+    htap::lsmtree::sstable::SSTablePaths paths(sstable_dir);
+
+    return file_size_if_exists(paths.data())
+        + file_size_if_exists(paths.meta())
+        + file_size_if_exists(paths.index())
+        + file_size_if_exists(paths.info())
+        + file_size_if_exists(paths.stats());
 }
 
 }
@@ -62,27 +81,26 @@ void LSMTree::flush_memtable() {
 
     LOG_INFO("Flushing SSTable id={} to {}", sst_id, file_path);
 
-    SSTableBuilder builder(schema_, file_path);
+    sstable::SSTableBuilder builder(schema_, file_path);
 
     for (const auto& row : imm->data()) {
         builder.add(row);
     }
 
-    SSTableBuildResult build_result = builder.finish();
+    sstable::SSTableBuildResult build_result = builder.finish();
 
     // эти две переменные - захардкожено то, куда и в каком виде должно
     // попадать первый sstable при flush-е imm_memtabl-а
     uint32_t level = 0;
-    SSTLayout layout = SSTLayout::ROW;
+    sstable::SSTLayout layout = sstable::SSTLayout::ROW;
 
-    SSTableInfo info{
+    sstable::SSTableInfo info{
         .id = sst_id,
         .path = file_path,
         .level = level,
         .min_key = build_result.min_key,
         .max_key = build_result.max_key,
-        .file_size_bytes = std::filesystem::file_size(file_path),
-        .meta_offset = build_result.meta_offset,
+        .file_size_bytes = sstable_size_bytes(file_path),
         .num_blocks = build_result.num_blocks,
         .layout = layout
     };
@@ -99,7 +117,8 @@ std::string LSMTree::build_sst_path(uint64_t id) const {
 std::unique_ptr<ICursor> LSMTree::scan(
     const storage::read::sstable::KeyRange& range,
     const std::vector<std::size_t>& projection,
-    storage::ScanOrder order
+    storage::ScanOrder order,
+    const storage::read::DataSkippingFilter& data_skipping_filter
 ) const {
     std::vector<std::unique_ptr<ICursor>> cursors;
 
@@ -150,7 +169,8 @@ std::unique_ptr<ICursor> LSMTree::scan(
                 metadata_cache,
                 range,
                 schema_types,
-                projection
+                projection,
+                data_skipping_filter
             );
 
             if (cursor && cursor->valid()) {

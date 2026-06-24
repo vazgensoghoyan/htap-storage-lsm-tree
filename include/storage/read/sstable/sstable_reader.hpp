@@ -2,7 +2,9 @@
 
 #include "storage/read/sstable/row_block_meta.hpp"
 #include "storage/read/sstable/column_block_meta.hpp"
-#include "lsmtree/sstable/sparse_index/sparse_index_entry.hpp"
+#include "storage/read/sstable/numeric_stats.hpp"
+#include "lsmtree/sstable/format/sparse_index_entry.hpp"
+#include "lsmtree/sstable/sstable_paths.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -33,6 +35,12 @@ public:
         std::uint32_t columns_count
     );
 
+    NumericStatsRange read_numeric_stats_range(
+        std::uint32_t first_block_id,
+        std::uint32_t block_count,
+        const std::vector<std::size_t>& column_indices
+    );
+
 private:
     std::vector<char> read_data_bytes(std::uint64_t offset, std::uint64_t size);
 
@@ -52,9 +60,10 @@ private:
     std::filesystem::path data_path() const;
     std::filesystem::path index_path() const;
     std::filesystem::path metadata_path() const;
+    std::filesystem::path stats_path() const;
 
 private:
-    std::filesystem::path path_;
+    lsmtree::sstable::SSTablePaths paths_;
     std::ifstream input_;
 };
 

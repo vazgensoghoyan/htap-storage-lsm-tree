@@ -7,6 +7,7 @@
 #include "storage/model/schema.hpp"
 #include "storage/api/types.hpp"
 #include "storage/api/cursor_interface.hpp"
+#include "storage/read/data_skipping_filter.hpp"
 
 namespace htap::storage {
 
@@ -52,7 +53,8 @@ public:
         std::optional<Key> from,
         std::optional<Key> to,
         const std::vector<size_t>& projection,
-        ScanOrder order = ScanOrder::Unordered) const = 0;
+        ScanOrder order = ScanOrder::Unordered,
+        const read::DataSkippingFilter& data_skipping_filter = {}) const = 0;
 };
 
 } // namespace htap::storage

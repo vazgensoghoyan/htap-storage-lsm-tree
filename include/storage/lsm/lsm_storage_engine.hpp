@@ -38,7 +38,8 @@ public:
         std::optional<Key> from,
         std::optional<Key> to,
         const std::vector<size_t>& projection,
-        ScanOrder order = ScanOrder::Unordered) const override;
+        ScanOrder order = ScanOrder::Unordered,
+        const read::DataSkippingFilter& data_skipping_filter = {}) const override;
 
 private:
     htap::lsmtree::LSMTree& get_tree(const std::string& table_name);

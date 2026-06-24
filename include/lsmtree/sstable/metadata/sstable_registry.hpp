@@ -5,14 +5,14 @@
 
 #include "lsmtree/sstable/metadata/sstable_info.hpp"
 
-namespace htap::lsmtree {
+namespace htap::lsmtree::sstable {
 
 class SSTableRegistry {
 public:
     SSTableRegistry() = default;
 
-    size_t level_count() const noexcept;
-    size_t sstable_count(uint32_t level) const noexcept;
+    size_t level_count() const;
+    size_t sstable_count(uint32_t level) const;
 
     void add(const SSTableInfo& info);
     void remove(uint64_t sst_id);
@@ -25,4 +25,4 @@ private:
     std::vector<std::vector<SSTableInfo>> levels_;
 };
 
-} // namespace htap::lsmtree
+} // namespace htap::lsmtree::sstable

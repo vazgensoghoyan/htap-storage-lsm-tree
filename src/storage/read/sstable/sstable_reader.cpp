@@ -1,6 +1,7 @@
 #include "storage/read/sstable/sstable_reader.hpp"
 
 #include <cstring>
+#include <algorithm>
 #include <filesystem>
 #include <stdexcept>
 #include <utility>
@@ -8,6 +9,19 @@
 namespace htap::storage::read::sstable {
 
 namespace {
+
+constexpr std::uint32_t STATS_MAGIC = 0x53544154; // "STAT"
+constexpr std::uint32_t STATS_VERSION = 1;
+constexpr std::uint32_t STATS_HEADER_SIZE = 16;
+constexpr std::uint32_t STATS_COLUMN_DESCRIPTOR_SIZE = 17;
+constexpr std::uint32_t NUMERIC_STATS_ENTRY_SIZE = 17;
+
+struct StatsColumnDescriptor {
+    std::uint32_t column_idx;
+    ValueType type;
+    std::uint64_t offset;
+    std::uint32_t entry_size;
+};
 
 template <typename T>
 T read_value(const std::vector<char>& data, std::size_t& pos) {
@@ -25,34 +39,31 @@ T read_value(const std::vector<char>& data, std::size_t& pos) {
 }
 
 SSTableReader::SSTableReader(std::filesystem::path path)
-    : path_(std::move(path)) {
+    : paths_(std::move(path)) {
     input_.open(data_path(), std::ios::binary);
-
     if (!input_.is_open()) {
-        throw std::runtime_error("Cannot open SSTable file: " + data_path().string());
+        throw std::runtime_error("Cannot open SSTable data file: " + data_path().string());
     }
 }
 
 const std::filesystem::path& SSTableReader::path() const noexcept {
-    return path_;
+    return paths_.dir();
 }
 
 std::filesystem::path SSTableReader::data_path() const {
-    auto path = path_;
-    path.replace_extension(".sst");
-    return path;
+    return paths_.data();
 }
 
 std::filesystem::path SSTableReader::index_path() const {
-    auto path = path_;
-    path.replace_extension(".idx");
-    return path;
+    return paths_.index();
 }
 
 std::filesystem::path SSTableReader::metadata_path() const {
-    auto path = path_;
-    path.replace_extension(".meta");
-    return path;
+    return paths_.meta();
+}
+
+std::filesystem::path SSTableReader::stats_path() const {
+    return paths_.stats();
 }
 
 std::vector<char> SSTableReader::read_block(const RowBlockMeta& block) {
@@ -230,6 +241,152 @@ std::vector<ColumnBlockMeta> SSTableReader::read_column_metadata_range(
     }
 
     return blocks;
+}
+
+NumericStatsRange SSTableReader::read_numeric_stats_range(
+    std::uint32_t first_block_id,
+    std::uint32_t block_count,
+    const std::vector<std::size_t>& column_indices
+) {
+    NumericStatsRange result{
+        .first_block_id = first_block_id,
+        .block_count = block_count,
+        .by_column = {}
+    };
+
+    if (block_count == 0 || column_indices.empty()) {
+        return result;
+    }
+
+    const auto path = stats_path();
+    if (!std::filesystem::exists(path)) {
+        return result;
+    }
+
+    const auto file_size = std::filesystem::file_size(path);
+    if (file_size < STATS_HEADER_SIZE) {
+        throw std::runtime_error("Invalid stats file size: " + path.string());
+    }
+
+    const auto header = read_bytes_from_file(path, 0, STATS_HEADER_SIZE);
+    std::size_t header_pos = 0;
+
+    const auto magic = read_value<std::uint32_t>(header, header_pos);
+    const auto version = read_value<std::uint32_t>(header, header_pos);
+    const auto num_blocks = read_value<std::uint32_t>(header, header_pos);
+    const auto num_stats_columns = read_value<std::uint32_t>(header, header_pos);
+
+    if (magic != STATS_MAGIC) {
+        throw std::runtime_error("Invalid stats file magic: " + path.string());
+    }
+
+    if (version != STATS_VERSION) {
+        throw std::runtime_error("Unsupported stats file version: " + path.string());
+    }
+
+    if (first_block_id > num_blocks || block_count > num_blocks - first_block_id) {
+        throw std::runtime_error("Stats block range is out of file bounds: " + path.string());
+    }
+
+    const auto descriptors_size =
+        static_cast<std::uint64_t>(num_stats_columns) * STATS_COLUMN_DESCRIPTOR_SIZE;
+
+    if (file_size < STATS_HEADER_SIZE + descriptors_size) {
+        throw std::runtime_error("Invalid stats descriptors size: " + path.string());
+    }
+
+    const auto descriptors_data = read_bytes_from_file(path, STATS_HEADER_SIZE, descriptors_size);
+    std::size_t descriptor_pos = 0;
+    std::vector<StatsColumnDescriptor> descriptors;
+    descriptors.reserve(num_stats_columns);
+
+    for (std::uint32_t i = 0; i < num_stats_columns; ++i) {
+        const auto column_idx = read_value<std::uint32_t>(descriptors_data, descriptor_pos);
+        const auto raw_type = read_value<std::uint8_t>(descriptors_data, descriptor_pos);
+        const auto offset = read_value<std::uint64_t>(descriptors_data, descriptor_pos);
+        const auto entry_size = read_value<std::uint32_t>(descriptors_data, descriptor_pos);
+
+        ValueType type;
+        switch (static_cast<ValueType>(raw_type)) {
+            case ValueType::INT64:
+                type = ValueType::INT64;
+                break;
+            case ValueType::DOUBLE:
+                type = ValueType::DOUBLE;
+                break;
+            default:
+                throw std::runtime_error("Invalid stats value type: " + path.string());
+        }
+
+        if (entry_size != NUMERIC_STATS_ENTRY_SIZE) {
+            throw std::runtime_error("Invalid stats entry size: " + path.string());
+        }
+
+        const auto column_data_size =
+            static_cast<std::uint64_t>(num_blocks) * entry_size;
+
+        if (offset > file_size || column_data_size > file_size - offset) {
+            throw std::runtime_error("Stats column data is out of file bounds: " + path.string());
+        }
+
+        descriptors.push_back(StatsColumnDescriptor{
+            .column_idx = column_idx,
+            .type = type,
+            .offset = offset,
+            .entry_size = entry_size
+        });
+    }
+
+    for (std::size_t requested_column : column_indices) {
+        const auto descriptor_it = std::find_if(
+            descriptors.begin(),
+            descriptors.end(),
+            [requested_column](const auto& descriptor) {
+                return descriptor.column_idx == requested_column;
+            }
+        );
+
+        if (descriptor_it == descriptors.end()) {
+            continue;
+        }
+
+        const auto offset =
+            descriptor_it->offset +
+            static_cast<std::uint64_t>(first_block_id) * descriptor_it->entry_size;
+        const auto size =
+            static_cast<std::uint64_t>(block_count) * descriptor_it->entry_size;
+        const auto data = read_bytes_from_file(path, offset, size);
+
+        std::size_t pos = 0;
+        std::vector<NumericBlockStats> column_stats;
+        column_stats.reserve(block_count);
+
+        for (std::uint32_t i = 0; i < block_count; ++i) {
+            const auto has_value = read_value<std::uint8_t>(data, pos) != 0;
+
+            NumericBlockStats stats{
+                .column_idx = descriptor_it->column_idx,
+                .type = descriptor_it->type,
+                .has_value = has_value,
+                .min_value = std::int64_t{0},
+                .max_value = std::int64_t{0}
+            };
+
+            if (descriptor_it->type == ValueType::INT64) {
+                stats.min_value = read_value<std::int64_t>(data, pos);
+                stats.max_value = read_value<std::int64_t>(data, pos);
+            } else {
+                stats.min_value = read_value<double>(data, pos);
+                stats.max_value = read_value<double>(data, pos);
+            }
+
+            column_stats.push_back(std::move(stats));
+        }
+
+        result.by_column.emplace(requested_column, std::move(column_stats));
+    }
+
+    return result;
 }
 
 } 

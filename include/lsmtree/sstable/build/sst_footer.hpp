@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace htap::lsmtree {
+namespace htap::lsmtree::sstable {
 
 static constexpr uint8_t ROW_LAYOUT = 0;
 static constexpr uint8_t COLUMN_LAYOUT = 1;
@@ -22,4 +22,4 @@ struct SSTFooter {
     uint8_t layout_type; // ROW or COLUMN
 };
 
-} // namespace htap::lsmtree
+} // namespace htap::lsmtree::sstable

@@ -3,8 +3,9 @@
 #include "lsmtree/sstable/metadata/sstable_registry.hpp"
 #include "lsmtree/sstable/metadata/sstable_info.hpp"
 
-using namespace htap::lsmtree;
 using namespace htap::storage;
+using namespace htap::lsmtree;
+using namespace htap::lsmtree::sstable;
 
 namespace {
 
@@ -18,8 +19,7 @@ SSTableInfo make_sstable_info(
     Key max_key,
     uint64_t file_size_bytes = 100,
     uint32_t num_blocks = 1,
-    SSTLayout layout = SSTLayout::ROW,
-    uint64_t meta_offset = 0
+    SSTLayout layout = SSTLayout::ROW
 ) {
     return SSTableInfo{
         .id = id,
@@ -28,7 +28,6 @@ SSTableInfo make_sstable_info(
         .min_key = min_key,
         .max_key = max_key,
         .file_size_bytes = file_size_bytes,
-        .meta_offset = meta_offset,
         .num_blocks = num_blocks,
         .layout = layout
     };

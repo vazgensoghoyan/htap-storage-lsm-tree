@@ -4,12 +4,13 @@
 
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
+#include "storage/read/sstable/numeric_stats.hpp"
 
-namespace htap::lsmtree {
+namespace htap::lsmtree::sstable {
 
 struct RowBlockMeta {
-    int64_t min_key;
-    int64_t max_key;
+    storage::Key min_key;
+    storage::Key max_key;
     uint32_t row_count;
     uint64_t offset;        // это сам заполняет SSTableBuilder
     uint64_t size_bytes;
@@ -19,6 +20,7 @@ struct RowBlockMeta {
 struct RowSSTBlockResult {
     std::vector<uint8_t> data;   // бинарный блок
     RowBlockMeta meta;
+    std::vector<storage::read::sstable::NumericBlockStats> numeric_stats;
 };
 
 class RowSSTBlockBuilder {
@@ -38,6 +40,8 @@ public:
 
 private:
     void encode_row(const storage::Row& row);
+    void reset_numeric_stats();
+    void update_numeric_stats(const storage::Row& row);
 
 private:
     const storage::Schema& schema_;
@@ -51,7 +55,9 @@ private:
 
     bool full_;
 
+    std::vector<storage::read::sstable::NumericBlockStats> numeric_stats_;
+
     static constexpr size_t TARGET_BLOCK_SIZE_BYTES = 4 * 1024; // 4 КБ
 };
 
-} // namespace htap::lsmtree
+} // namespace htap::lsmtree::sstable

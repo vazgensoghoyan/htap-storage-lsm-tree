@@ -32,39 +32,39 @@ public:
     }
 
     void write(const std::vector<char>& data) const {
+        std::filesystem::create_directories(path_);
+
         std::ofstream out(data_path(), std::ios::binary);
         out.write(data.data(), static_cast<std::streamsize>(data.size()));
     }
 
     void touch() const {
+        std::filesystem::create_directories(path_);
+
         std::ofstream out(data_path(), std::ios::binary);
     }
 
 private:
     std::filesystem::path data_path() const {
-        auto path = path_;
-        path.replace_extension(".sst");
-        return path;
-    }
-
-    std::filesystem::path index_path() const {
-        auto path = path_;
-        path.replace_extension(".idx");
-        return path;
-    }
-
-    std::filesystem::path metadata_path() const {
-        auto path = path_;
-        path.replace_extension(".meta");
-        return path;
+        return path_ / "data.sst";
     }
 
     void cleanup() const {
         std::error_code ec;
-        std::filesystem::remove(path_, ec);
-        std::filesystem::remove(data_path(), ec);
-        std::filesystem::remove(index_path(), ec);
-        std::filesystem::remove(metadata_path(), ec);
+
+        std::filesystem::remove_all(path_, ec);
+
+        auto old_data = path_;
+        old_data.replace_extension(".sst");
+        std::filesystem::remove(old_data, ec);
+
+        auto old_index = path_;
+        old_index.replace_extension(".idx");
+        std::filesystem::remove(old_index, ec);
+
+        auto old_meta = path_;
+        old_meta.replace_extension(".meta");
+        std::filesystem::remove(old_meta, ec);
     }
 
 private:

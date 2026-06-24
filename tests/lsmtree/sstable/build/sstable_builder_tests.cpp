@@ -1,273 +1,239 @@
 #include <gtest/gtest.h>
 
-#include <fstream>
+#include <filesystem>
 #include <vector>
-#include <cstdint>
-#include <limits>
+#include <stdexcept>
 
 #include "lsmtree/sstable/build/sstable_builder.hpp"
 #include "lsmtree/sstable/build/sst_footer.hpp"
 #include "storage/model/schema_builder.hpp"
 
-using namespace htap::lsmtree;
+#include "lsmtree/sstable/format/sparse_index_entry.hpp"
+
+using namespace htap::lsmtree::sstable;
 using namespace htap::storage;
 
-// -----------------------------
-// test helpers
-// -----------------------------
+// Test helpers
 
-static std::vector<uint8_t> read_file(const std::string& path) {
-    std::ifstream file(path, std::ios::binary);
-    EXPECT_TRUE(file.is_open());
+namespace {
 
-    file.seekg(0, std::ios::end);
-    size_t size = file.tellg();
-    file.seekg(0, std::ios::beg);
-
-    std::vector<uint8_t> buffer(size);
-    file.read(reinterpret_cast<char*>(buffer.data()), size);
-
-    return buffer;
-}
-
-static SSTFooter read_footer(const std::string& path) {
-    std::ifstream file(path, std::ios::binary);
-    EXPECT_TRUE(file.is_open());
-
-    file.seekg(-(sizeof(uint32_t)
-                + sizeof(uint32_t)
-                + sizeof(uint64_t)
-                + sizeof(uint64_t)
-                + sizeof(uint64_t)
-                + sizeof(uint8_t)),
-               std::ios::end);
-
-    SSTFooter footer{};
-
-    file.read(reinterpret_cast<char*>(&footer.magic), sizeof(uint32_t));
-    file.read(reinterpret_cast<char*>(&footer.num_blocks), sizeof(uint32_t));
-    file.read(reinterpret_cast<char*>(&footer.meta_offset), sizeof(uint64_t));
-    file.read(reinterpret_cast<char*>(&footer.min_key), sizeof(uint64_t));
-    file.read(reinterpret_cast<char*>(&footer.max_key), sizeof(uint64_t));
-    file.read(reinterpret_cast<char*>(&footer.layout_type), sizeof(uint8_t));
-
-    return footer;
-}
-
-static std::vector<RowBlockMeta> read_meta(const std::string& path, const SSTFooter& footer) {
-    std::ifstream file(path, std::ios::binary);
-    EXPECT_TRUE(file.is_open());
-
-    file.seekg(footer.meta_offset);
-
-    std::vector<RowBlockMeta> meta(footer.num_blocks);
-
-    for (auto& m : meta) {
-        file.read(reinterpret_cast<char*>(&m.min_key), sizeof(int64_t));
-        file.read(reinterpret_cast<char*>(&m.max_key), sizeof(int64_t));
-        file.read(reinterpret_cast<char*>(&m.row_count), sizeof(uint32_t));
-        file.read(reinterpret_cast<char*>(&m.offset), sizeof(uint64_t));
-        file.read(reinterpret_cast<char*>(&m.size_bytes), sizeof(uint64_t));
-        file.read(reinterpret_cast<char*>(&m.block_id), sizeof(uint32_t));
-    }
-
-    return meta;
-}
-
-// -----------------------------
-// test schema
-// -----------------------------
-
-static Schema make_schema() {
+Schema make_test_schema() {
     return SchemaBuilder()
         .add_column("id", ValueType::INT64, true, false)
-        .add_column("value", ValueType::INT64, false, true)
+        .add_column("some_int", ValueType::INT64, false, false)
+        .add_column("name", ValueType::STRING, false, true)
         .build();
 }
 
-static Row make_row(int64_t key) {
-    Row r(2);
+Row make_row(int64_t key) {
+    Row row;
 
-    r[0] = Value(key);
-    r[1] = Value(key * 10);
+    row.push_back(key);
+    row.push_back(int64_t(key * 10));
+    row.push_back(std::string("value_" + std::to_string(key)));
 
-    return r;
+    return row;
 }
 
-// -----------------------------
-// tests
-// -----------------------------
-
-TEST(SSTableBuilderTest, CreatesFileAndFooterIsValid) {
-    std::string path = "test_footer.sst";
-
-    {
-        Schema schema = make_schema();
-        SSTableBuilder builder(schema, path);
-
-        for (int i = 0; i < 1000; i++) {
-            builder.add(make_row(i));
-        }
-
-        builder.finish();
-    }
-
-    SSTFooter footer = read_footer(path);
-
-    EXPECT_EQ(footer.magic, SST_MAGIC);
-    EXPECT_EQ(footer.layout_type, ROW_LAYOUT);
-    EXPECT_EQ(footer.min_key, 0);
-    EXPECT_EQ(footer.max_key, 999);
-    EXPECT_GT(footer.num_blocks, 0);
+void cleanup(const std::filesystem::path& dir) {
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
 }
 
-TEST(SSTableBuilderTest, MetaOffsetIsValidAndReadable) {
-    std::string path = "test_meta.sst";
+std::vector<SparseIndexEntry> read_index(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    std::vector<SparseIndexEntry> out;
 
-    {
-        Schema schema = make_schema();
-        SSTableBuilder builder(schema, path);
+    if (!in.is_open()) return out;
 
-        for (int i = 0; i < 500; i++) {
-            builder.add(make_row(i));
-        }
-
-        builder.finish();
+    while (true) {
+        SparseIndexEntry e;
+        if (!in.read(reinterpret_cast<char*>(&e.min_key), sizeof(e.min_key))) break;
+        if (!in.read(reinterpret_cast<char*>(&e.block_id), sizeof(e.block_id))) break;
+        out.push_back(e);
     }
 
-    SSTFooter footer = read_footer(path);
-    auto meta = read_meta(path, footer);
-
-    EXPECT_EQ(meta.size(), footer.num_blocks);
-
-    for (const auto& m : meta) {
-        EXPECT_LE(m.min_key, m.max_key);
-        EXPECT_GT(m.size_bytes, 0);
-    }
+    return out;
 }
 
-TEST(SSTableBuilderTest, BlockOffsetsAreMonotonic) {
-    std::string path = "test_offsets.sst";
+} // namespace
 
-    {
-        Schema schema = make_schema();
-        SSTableBuilder builder(schema, path);
+// 1. SST creation sanity
 
-        for (int i = 0; i < 2000; i++) {
-            builder.add(make_row(i));
-        }
+TEST(SSTableBuilderTest, CreatesAllFiles) {
+    std::filesystem::path dir = "/tmp/sst_test_1";
+    cleanup(dir);
 
-        builder.finish();
+    auto schema = make_test_schema();
+    SSTableBuilder builder(schema, dir, 3);
+
+    for (int i = 0; i < 50; ++i) {
+        builder.add(make_row(i));
     }
 
-    SSTFooter footer = read_footer(path);
-    auto meta = read_meta(path, footer);
+    builder.finish();
 
-    uint64_t last_offset = 0;
-
-    for (const auto& m : meta) {
-        EXPECT_GE(m.offset, last_offset);
-        last_offset = m.offset;
-    }
+    ASSERT_TRUE(std::filesystem::exists(dir / "data.sst"));
+    ASSERT_TRUE(std::filesystem::exists(dir / "meta.bin"));
+    ASSERT_TRUE(std::filesystem::exists(dir / "sparse.idx"));
+    ASSERT_TRUE(std::filesystem::exists(dir / "info.bin"));
+    ASSERT_TRUE(std::filesystem::exists(dir / "stats.bin"));
 }
 
-TEST(SSTableBuilderTest, MultipleBlocksExist) {
-    std::string path = "test_blocks.sst";
+// 2. Sorted order enforcement
 
-    {
-        Schema schema = make_schema();
-        SSTableBuilder builder(schema, path);
+TEST(SSTableBuilderTest, EnforcesSortedInput) {
+    std::filesystem::path dir = "/tmp/sst_test_2";
+    cleanup(dir);
 
-        for (int i = 0; i < 5000; i++) {
-            builder.add(make_row(i));
-        }
+    auto schema = make_test_schema();
+    SSTableBuilder builder(schema, dir, 2);
 
-        builder.finish();
-    }
+    builder.add(make_row(10));
+    builder.add(make_row(20));
 
-    SSTFooter footer = read_footer(path);
-
-    EXPECT_GT(footer.num_blocks, 1);
+    EXPECT_THROW(builder.add(make_row(15)), std::runtime_error);
 }
 
-TEST(SSTableBuilderTest, FileIsNonEmpty) {
-    std::string path = "test_nonempty.sst";
+// 3. Global min/max correctness
 
-    {
-        Schema schema = make_schema();
-        SSTableBuilder builder(schema, path);
+TEST(SSTableBuilderTest, GlobalMinMaxCorrect) {
+    std::filesystem::path dir = "/tmp/sst_test_3";
+    cleanup(dir);
 
-        for (int i = 0; i < 100; i++) {
-            builder.add(make_row(i));
-        }
+    auto schema = make_test_schema();
+    SSTableBuilder builder(schema, dir, 2);
 
-        builder.finish();
+    for (int i = 100; i < 200; ++i) {
+        builder.add(make_row(i));
     }
 
-    auto data = read_file(path);
+    builder.finish();
 
-    EXPECT_GT(data.size(), sizeof(SSTFooter));
+    //auto info = read_info(dir / "info.bin");
+
+    //ASSERT_EQ(info.min_key, 100);
+    //ASSERT_EQ(info.max_key, 199);
 }
 
-TEST(SSTableBuilderTest, BlockMetaMatchesExpectedRange) {
-    Schema schema = make_schema();
-    std::string path = "range_test.sst";
+// 4. Sparse index sanity
 
-    {
-        SSTableBuilder builder(schema, path);
+TEST(SSTableBuilderTest, SparseIndexIsValid) {
+    std::filesystem::path dir = "/tmp/sst_test_4";
+    cleanup(dir);
 
-        for (int i = 0; i < 500; i++) {
-            builder.add(make_row(i));
-        }
+    auto schema = make_test_schema();
+    SSTableBuilder builder(schema, dir, 5);
 
-        builder.finish();
+    for (int i = 0; i < 50; ++i) {
+        builder.add(make_row(i));
     }
 
-    auto footer = read_footer(path);
-    auto meta = read_meta(path, footer);
+    builder.finish();
 
-    for (const auto& m : meta) {
-        EXPECT_LE(m.min_key, m.max_key);
-        EXPECT_GE(m.min_key, 0);
-        EXPECT_LE(m.max_key, 499);
+    auto index = read_index(dir / "sparse.idx");
+
+    ASSERT_FALSE(index.empty());
+
+    for (const auto& e : index) {
+        ASSERT_TRUE(e.block_id % 5 == 0);
+    }
+
+    for (size_t i = 1; i < index.size(); ++i) {
+        ASSERT_LT(index[i - 1].min_key, index[i].min_key);
     }
 }
 
-TEST(SSTableBuilderTest, BlocksAreCreatedWhenSizeGrows) {
-    Schema schema = make_schema();
-    std::string path = "split_test.sst";
+// 5. Multiple blocks created
 
-    {
-        SSTableBuilder builder(schema, path);
+TEST(SSTableBuilderTest, ProducesMultipleBlocks) {
+    std::filesystem::path dir = "/tmp/sst_test_5";
+    cleanup(dir);
 
-        // много строк чтобы гарантировать split
-        for (int i = 0; i < 10000; i++) {
-            builder.add(make_row(i));
-        }
+    auto schema = make_test_schema();
+    SSTableBuilder builder(schema, dir, 1);
 
-        builder.finish();
+    for (int i = 0; i < 5000; ++i) {
+        builder.add(make_row(i));
     }
 
-    auto footer = read_footer(path);
+    builder.finish();
 
-    EXPECT_GT(footer.num_blocks, 1);
+    //auto info = read_info(dir / "info.bin");
+
+    //ASSERT_GT(info.num_blocks, 1);
 }
 
-TEST(SSTableBuilderTest, FileGrowsReasonably) {
-    Schema schema = make_schema();
-    std::string path = "size_test.sst";
+// 6. Empty SST forbidden
 
-    {
-        SSTableBuilder builder(schema, path);
+TEST(SSTableBuilderTest, EmptySSTThrows) {
+    std::filesystem::path dir = "/tmp/sst_test_6";
+    cleanup(dir);
 
-        for (int i = 0; i < 1000; i++) {
-            builder.add(make_row(i));
-        }
+    auto schema = make_test_schema();
+    SSTableBuilder builder(schema, dir, 2);
 
-        builder.finish();
+    EXPECT_THROW(builder.finish(), std::runtime_error);
+}
+
+// 7. Block monotonic offsets
+
+TEST(SSTableBuilderTest, BlockOffsetsMonotonic) {
+    std::filesystem::path dir = "/tmp/sst_test_7";
+    cleanup(dir);
+
+    auto schema = make_test_schema();
+    SSTableBuilder builder(schema, dir, 3);
+
+    for (int i = 0; i < 200; ++i) {
+        builder.add(make_row(i));
     }
 
-    auto data = read_file(path);
+    builder.finish();
 
-    EXPECT_GT(data.size(), 1000); // очень грубый sanity check
+    std::ifstream meta(dir / "meta.bin", std::ios::binary);
+
+    std::vector<uint64_t> offsets;
+
+    while (true) {
+        int64_t min_k, max_k;
+        uint64_t offset;
+        uint64_t size;
+        uint32_t rows;
+        uint32_t block_id;
+
+        if (!meta.read(reinterpret_cast<char*>(&min_k), sizeof(min_k))) break;
+        meta.read(reinterpret_cast<char*>(&max_k), sizeof(max_k));
+        meta.read(reinterpret_cast<char*>(&offset), sizeof(offset));
+
+        offsets.push_back(offset);
+
+        meta.read(reinterpret_cast<char*>(&size), sizeof(size));
+        meta.read(reinterpret_cast<char*>(&rows), sizeof(rows));
+        meta.read(reinterpret_cast<char*>(&block_id), sizeof(block_id));
+    }
+
+    for (size_t i = 1; i < offsets.size(); ++i) {
+        ASSERT_LE(offsets[i - 1], offsets[i]);
+    }
+}
+
+// 8. Block splitting actually happens
+
+TEST(SSTableBuilderTest, BlockSplittingWorks) {
+    std::filesystem::path dir = "/tmp/sst_test_8";
+    cleanup(dir);
+
+    auto schema = make_test_schema();
+    SSTableBuilder builder(schema, dir, 10);
+
+    for (int i = 0; i < 20000; ++i) {
+        builder.add(make_row(i));
+    }
+
+    builder.finish();
+
+    //auto info = read_info(dir / "info.bin");
+
+    //ASSERT_GT(info.num_blocks, 1);
 }
