@@ -16,13 +16,6 @@ constexpr std::uint32_t STATS_HEADER_SIZE = 16;
 constexpr std::uint32_t STATS_COLUMN_DESCRIPTOR_SIZE = 17;
 constexpr std::uint32_t NUMERIC_STATS_ENTRY_SIZE = 17;
 
-struct StatsColumnDescriptor {
-    std::uint32_t column_idx;
-    ValueType type;
-    std::uint64_t offset;
-    std::uint32_t entry_size;
-};
-
 template <typename T>
 T read_value(const std::vector<char>& data, std::size_t& pos) {
     if (pos + sizeof(T) > data.size()) {
@@ -243,25 +236,22 @@ std::vector<ColumnBlockMeta> SSTableReader::read_column_metadata_range(
     return blocks;
 }
 
-NumericStatsRange SSTableReader::read_numeric_stats_range(
-    std::uint32_t first_block_id,
-    std::uint32_t block_count,
-    const std::vector<std::size_t>& column_indices
-) {
-    NumericStatsRange result{
-        .first_block_id = first_block_id,
-        .block_count = block_count,
-        .by_column = {}
-    };
-
-    if (block_count == 0 || column_indices.empty()) {
-        return result;
+void SSTableReader::load_numeric_stats_index() {
+    if (numeric_stats_index_loaded_) {
+        return;
     }
+
+    numeric_stats_index_loaded_ = true;
 
     const auto path = stats_path();
     if (!std::filesystem::exists(path)) {
-        return result;
+        numeric_stats_file_exists_ = false;
+        numeric_stats_num_blocks_ = 0;
+        numeric_stats_descriptors_.clear();
+        return;
     }
+
+    numeric_stats_file_exists_ = true;
 
     const auto file_size = std::filesystem::file_size(path);
     if (file_size < STATS_HEADER_SIZE) {
@@ -284,10 +274,6 @@ NumericStatsRange SSTableReader::read_numeric_stats_range(
         throw std::runtime_error("Unsupported stats file version: " + path.string());
     }
 
-    if (first_block_id > num_blocks || block_count > num_blocks - first_block_id) {
-        throw std::runtime_error("Stats block range is out of file bounds: " + path.string());
-    }
-
     const auto descriptors_size =
         static_cast<std::uint64_t>(num_stats_columns) * STATS_COLUMN_DESCRIPTOR_SIZE;
 
@@ -297,7 +283,7 @@ NumericStatsRange SSTableReader::read_numeric_stats_range(
 
     const auto descriptors_data = read_bytes_from_file(path, STATS_HEADER_SIZE, descriptors_size);
     std::size_t descriptor_pos = 0;
-    std::vector<StatsColumnDescriptor> descriptors;
+    std::vector<NumericStatsColumnDescriptor> descriptors;
     descriptors.reserve(num_stats_columns);
 
     for (std::uint32_t i = 0; i < num_stats_columns; ++i) {
@@ -329,7 +315,7 @@ NumericStatsRange SSTableReader::read_numeric_stats_range(
             throw std::runtime_error("Stats column data is out of file bounds: " + path.string());
         }
 
-        descriptors.push_back(StatsColumnDescriptor{
+        descriptors.push_back(NumericStatsColumnDescriptor{
             .column_idx = column_idx,
             .type = type,
             .offset = offset,
@@ -337,16 +323,46 @@ NumericStatsRange SSTableReader::read_numeric_stats_range(
         });
     }
 
+    numeric_stats_num_blocks_ = num_blocks;
+    numeric_stats_descriptors_ = std::move(descriptors);
+}
+
+NumericStatsRange SSTableReader::read_numeric_stats_range(
+    std::uint32_t first_block_id,
+    std::uint32_t block_count,
+    const std::vector<std::size_t>& column_indices
+) {
+    NumericStatsRange result{
+        .first_block_id = first_block_id,
+        .block_count = block_count,
+        .by_column = {}
+    };
+
+    if (block_count == 0 || column_indices.empty()) {
+        return result;
+    }
+
+    load_numeric_stats_index();
+
+    if (!numeric_stats_file_exists_) {
+        return result;
+    }
+
+    if (first_block_id > numeric_stats_num_blocks_ ||
+        block_count > numeric_stats_num_blocks_ - first_block_id) {
+        throw std::runtime_error("Stats block range is out of file bounds: " + stats_path().string());
+    }
+
     for (std::size_t requested_column : column_indices) {
         const auto descriptor_it = std::find_if(
-            descriptors.begin(),
-            descriptors.end(),
+            numeric_stats_descriptors_.begin(),
+            numeric_stats_descriptors_.end(),
             [requested_column](const auto& descriptor) {
                 return descriptor.column_idx == requested_column;
             }
         );
 
-        if (descriptor_it == descriptors.end()) {
+        if (descriptor_it == numeric_stats_descriptors_.end()) {
             continue;
         }
 
@@ -355,7 +371,7 @@ NumericStatsRange SSTableReader::read_numeric_stats_range(
             static_cast<std::uint64_t>(first_block_id) * descriptor_it->entry_size;
         const auto size =
             static_cast<std::uint64_t>(block_count) * descriptor_it->entry_size;
-        const auto data = read_bytes_from_file(path, offset, size);
+        const auto data = read_bytes_from_file(stats_path(), offset, size);
 
         std::size_t pos = 0;
         std::vector<NumericBlockStats> column_stats;

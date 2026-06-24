@@ -13,6 +13,7 @@
 #include "storage/cursor/immutable_memtable_cursor.hpp"
 #include "storage/cursor/cursor_factory.hpp"
 #include "storage/read/sstable/sstable_cursor_factory.hpp"
+#include "lsmtree/sstable/metadata/sstable_registry.hpp"
 
 using namespace htap::lsmtree;
 using namespace htap::storage;
@@ -161,8 +162,11 @@ std::unique_ptr<ICursor> LSMTree::scan(
         );
 
         for (const auto& info : sstables) {
+            auto& metadata_cache = get_or_create_metadata_cache(info);
+
             auto cursor = read::sstable::make_sstable_cursor(
                 info,
+                metadata_cache,
                 range,
                 schema_types,
                 projection,
@@ -180,4 +184,26 @@ std::unique_ptr<ICursor> LSMTree::scan(
         order
     );
 
+}
+
+htap::storage::read::sstable::SSTableMetadataCache& LSMTree::get_or_create_metadata_cache(
+    const sstable::SSTableInfo& info
+) const {
+    auto it = sstable_metadata_caches_.find(info.id);
+
+    if (it != sstable_metadata_caches_.end()) {
+        return *it->second;
+    }
+
+    auto cache = std::make_unique<storage::read::sstable::SSTableMetadataCache>(
+        info,
+        static_cast<std::uint32_t>(schema_.size())
+    );
+
+    auto [inserted_it, inserted] = sstable_metadata_caches_.emplace(
+        info.id,
+        std::move(cache)
+    );
+
+    return *inserted_it->second;
 }

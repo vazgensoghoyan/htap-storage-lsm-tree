@@ -17,6 +17,7 @@ namespace htap::storage::read::sstable {
 
 std::unique_ptr<ICursor> make_sstable_cursor(
     const lsmtree::sstable::SSTableInfo& info,
+    SSTableMetadataCache& metadata_cache,
     const KeyRange& range,
     const std::vector<ValueType>& schema,
     const std::vector<std::size_t>& projection,
@@ -25,7 +26,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
     std::unique_ptr<SSTableReader> reader = std::make_unique<SSTableReader>(info.path);
     SparseBlockSelector selector;
 
-    const auto sparse_index = reader->read_sparse_index();
+    const auto& sparse_index = metadata_cache.sparse_index();
 
     const auto selected_metadata_range = selector.select_metadata_range(
         sparse_index,
@@ -39,7 +40,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
 
     switch (info.layout) {
         case lsmtree::sstable::SSTLayout::ROW: {
-            auto candidates = reader->read_row_metadata_range(
+            auto candidates = metadata_cache.read_row_metadata_range(
                 selected_metadata_range.first_block_id,
                 selected_metadata_range.block_count
             );
@@ -50,7 +51,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
             );
 
             if (!filtered_blocks.empty() && !data_skipping_filter.empty()) {
-                const auto stats = reader->read_numeric_stats_range(
+                const auto stats = metadata_cache.read_numeric_stats_range(
                     selected_metadata_range.first_block_id,
                     selected_metadata_range.block_count,
                     data_skipping_filter.referenced_columns()
@@ -78,10 +79,9 @@ std::unique_ptr<ICursor> make_sstable_cursor(
         }
         
         case lsmtree::sstable::SSTLayout::COLUMN: {
-            auto candidates = reader->read_column_metadata_range(
+            auto candidates = metadata_cache.read_column_metadata_range(
                 selected_metadata_range.first_block_id,
-                selected_metadata_range.block_count,
-                static_cast<std::uint32_t>(schema.size())
+                selected_metadata_range.block_count
             );
 
             auto filtered_blocks = selector.filter_candidate_column_blocks(
@@ -100,7 +100,7 @@ std::unique_ptr<ICursor> make_sstable_cursor(
                     }
                 }
 
-                const auto stats = reader->read_numeric_stats_range(
+                const auto stats = metadata_cache.read_numeric_stats_range(
                     selected_metadata_range.first_block_id,
                     selected_metadata_range.block_count,
                     data_skipping_filter.referenced_columns()

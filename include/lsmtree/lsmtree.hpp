@@ -5,6 +5,7 @@
 #include "storage/api/cursor_interface.hpp"
 #include "storage/read/data_skipping_filter.hpp"
 #include "storage/read/sstable/key_range.hpp"
+#include "storage/read/sstable/sstable_metadata_cache.hpp"
 
 #include "lsmtree/mem/memory_layer.hpp"
 #include "lsmtree/sstable/metadata/sstable_registry.hpp"
@@ -12,6 +13,7 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 
 namespace htap::lsmtree {
 
@@ -38,6 +40,10 @@ private:
     void flush_memtable();
     std::string build_sst_path(uint64_t sst_id) const;
 
+    htap::storage::read::sstable::SSTableMetadataCache& get_or_create_metadata_cache(
+        const sstable::SSTableInfo& info
+    ) const;
+
 private:
     storage::Schema schema_;
 
@@ -48,6 +54,11 @@ private:
     sstable::SSTableRegistry registry_;
 
     uint64_t next_sst_id_ = 0;
+
+    mutable std::unordered_map<
+        std::uint64_t,
+        std::unique_ptr<storage::read::sstable::SSTableMetadataCache>
+    > sstable_metadata_caches_;
 };
 
 } // namespace htap::lsmtree

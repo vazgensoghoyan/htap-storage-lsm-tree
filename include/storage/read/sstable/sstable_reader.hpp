@@ -42,7 +42,15 @@ public:
     );
 
 private:
+    struct NumericStatsColumnDescriptor {
+        std::uint32_t column_idx;
+        ValueType type;
+        std::uint64_t offset;
+        std::uint32_t entry_size;
+    };
+
     std::vector<char> read_data_bytes(std::uint64_t offset, std::uint64_t size);
+    void load_numeric_stats_index();
 
     static std::vector<char> read_bytes_from_file(
         const std::filesystem::path& path,
@@ -65,6 +73,11 @@ private:
 private:
     lsmtree::sstable::SSTablePaths paths_;
     std::ifstream input_;
+
+    bool numeric_stats_index_loaded_ = false;
+    bool numeric_stats_file_exists_ = false;
+    std::uint32_t numeric_stats_num_blocks_ = 0;
+    std::vector<NumericStatsColumnDescriptor> numeric_stats_descriptors_;
 };
 
 }
