@@ -15,14 +15,33 @@ using namespace htap::lsmtree::sstable;
 ColumnSSTableBuilder::ColumnSSTableBuilder(
     const Schema& schema,
     const std::filesystem::path& sstable_dir,
-    uint32_t sparse_index_step
+    uint32_t sparse_index_step,
+    std::size_t target_block_rows,
+    std::size_t column_block_target_bytes
+)
+    : ColumnSSTableBuilder(
+        schema,
+        sstable_dir,
+        SparseIndexOptions{.fixed_step = sparse_index_step},
+        target_block_rows,
+        column_block_target_bytes
+    )
+{}
+
+ColumnSSTableBuilder::ColumnSSTableBuilder(
+    const Schema& schema,
+    const std::filesystem::path& sstable_dir,
+    SparseIndexOptions sparse_index_options,
+    std::size_t target_block_rows,
+    std::size_t column_block_target_bytes
 )
     : schema_(schema)
     , paths_(sstable_dir)
     , data_writer_(data_file_)
     , meta_writer_(meta_file_)
     , index_writer_(index_file_)
-    , sparse_index_step_(sparse_index_step)
+    , sparse_index_options_(sparse_index_options)
+    , target_block_rows_(target_block_rows)
     , global_min_(std::numeric_limits<Key>::max())
     , global_max_(std::numeric_limits<Key>::min())
     , last_key_(0)
@@ -30,6 +49,22 @@ ColumnSSTableBuilder::ColumnSSTableBuilder(
 {
     if (schema_.size() == 0)
         throw std::runtime_error("ColumnSSTableBuilder: schema must not be empty");
+
+    if (sparse_index_options_.min_step == 0) {
+        throw std::runtime_error("ColumnSSTableBuilder: sparse index min step must be positive");
+    }
+
+    if (sparse_index_options_.max_step < sparse_index_options_.min_step) {
+        throw std::runtime_error("ColumnSSTableBuilder: sparse index max step must be >= min step");
+    }
+
+    if (target_block_rows_ == 0) {
+        throw std::runtime_error("ColumnSSTableBuilder: target block rows must be positive");
+    }
+
+    if (column_block_target_bytes == 0) {
+        throw std::runtime_error("ColumnSSTableBuilder: column block target bytes must be positive");
+    }
 
     std::filesystem::create_directories(paths_.dir());
 
@@ -45,7 +80,11 @@ ColumnSSTableBuilder::ColumnSSTableBuilder(
     // Колонка 0 — ключ, обрабатывается отдельно как packed int64 (без bitmap)
     col_builders_.reserve(schema_.size() - 1);
     for (size_t i = 1; i < schema_.size(); ++i) {
-        col_builders_.emplace_back(schema_.get_column(i), static_cast<uint16_t>(i));
+        col_builders_.emplace_back(
+            schema_.get_column(i),
+            static_cast<uint16_t>(i),
+            column_block_target_bytes
+        );
     }
 
     LOG_INFO("ColumnSSTableBuilder: opened {}", paths_.dir().string());
@@ -60,7 +99,7 @@ void ColumnSSTableBuilder::add(const Row& row) {
     if (!first_row_ && key < last_key_)
         throw std::runtime_error("ColumnSSTableBuilder: rows must be sorted by key");
 
-    if (key_buffer_.size() >= TARGET_BLOCK_ROWS || any_col_builder_full())
+    if (key_buffer_.size() >= target_block_rows_ || any_col_builder_full())
         flush_block();
 
     key_buffer_.push_back(key);
@@ -87,6 +126,7 @@ SSTableBuildResult ColumnSSTableBuilder::finish() {
         flush_block();
 
     write_info_file();
+    write_sparse_index_file();
     write_stats_file();
 
     data_file_.flush();
@@ -189,15 +229,10 @@ void ColumnSSTableBuilder::flush_block() {
 
     block_numeric_stats_.push_back(std::move(logical_block_stats));
 
-    // 3. Sparse index entry (каждые sparse_index_step_ logical blocks)
-    if (block_id_ % sparse_index_step_ == 0) {
-        SparseIndexEntry entry{
-            .min_key  = block_min,
-            .block_id = block_id_
-        };
-        index_writer_.write_i64(entry.min_key);
-        index_writer_.write_u32(entry.block_id);
-    }
+    sparse_index_candidates_.push_back(SparseIndexEntry{
+        .min_key = block_min,
+        .block_id = block_id_
+    });
 
     LOG_INFO(
         "ColumnSSTableBuilder: flushed block id={}, rows={}, min_key={}, max_key={}",
@@ -221,6 +256,21 @@ void ColumnSSTableBuilder::write_info_file() {
     writer.write_u8(static_cast<uint8_t>(SSTLayout::COLUMN));
 
     info_file.flush();
+}
+
+void ColumnSSTableBuilder::write_sparse_index_file() {
+    const auto effective_step = choose_sparse_index_step(block_id_, sparse_index_options_);
+
+    for (const auto& entry : sparse_index_candidates_) {
+        if (entry.block_id % effective_step != 0) {
+            continue;
+        }
+
+        index_writer_.write_i64(entry.min_key);
+        index_writer_.write_u32(entry.block_id);
+    }
+
+    index_file_.flush();
 }
 
 void ColumnSSTableBuilder::write_stats_file() {

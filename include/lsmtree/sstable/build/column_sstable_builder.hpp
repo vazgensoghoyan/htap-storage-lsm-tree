@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "lsmtree/sstable/build/sstable_build_result.hpp"
+#include "lsmtree/sstable/build/sparse_index_options.hpp"
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
 
@@ -33,7 +34,17 @@ public:
     ColumnSSTableBuilder(
         const storage::Schema& schema,
         const std::filesystem::path& sstable_dir,
-        uint32_t sparse_index_step = 1000
+        uint32_t sparse_index_step = 0,
+        std::size_t target_block_rows = 128,
+        std::size_t column_block_target_bytes = 4 * 1024
+    );
+
+    ColumnSSTableBuilder(
+        const storage::Schema& schema,
+        const std::filesystem::path& sstable_dir,
+        SparseIndexOptions sparse_index_options,
+        std::size_t target_block_rows = 128,
+        std::size_t column_block_target_bytes = 4 * 1024
     );
 
     void add(const storage::Row& row);
@@ -54,6 +65,7 @@ private:
     );
 
     void write_info_file();
+    void write_sparse_index_file();
     void write_stats_file();
 
     bool any_col_builder_full() const;
@@ -74,8 +86,12 @@ private:
     std::vector<ColumnSSTBlockBuilder> col_builders_; // builders для value-колонок (schema index 1..N-1)
     std::vector<storage::Key> key_buffer_;            // буфер ключей текущего logical block
     std::vector<std::vector<storage::read::sstable::NumericBlockStats>> block_numeric_stats_;
+    std::vector<SparseIndexEntry> sparse_index_candidates_;
 
-    uint32_t sparse_index_step_;
+    SparseIndexOptions sparse_index_options_;
+    // Сколько строк накапливать в одном logical block (для фиксированных типов).
+    // Для переменных типов (STRING) flush срабатывает раньше через any_col_builder_full().
+    std::size_t target_block_rows_;
     uint64_t data_offset_ = 0;
     uint32_t block_id_ = 0;
 
@@ -86,9 +102,6 @@ private:
     bool finished_ = false;
     bool first_row_ = true;
 
-    // Сколько строк накапливать в одном logical block (для фиксированных типов).
-    // Для переменных типов (STRING) flush срабатывает раньше через any_col_builder_full().
-    static constexpr size_t TARGET_BLOCK_ROWS = 128;
 };
 
 } // namespace htap::lsmtree::sstable

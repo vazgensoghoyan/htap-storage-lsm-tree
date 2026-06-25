@@ -16,20 +16,42 @@ using namespace htap::lsmtree::sstable;
 RowSSTableBuilder::RowSSTableBuilder(
     const Schema& schema,
     const std::filesystem::path& sstable_dir,
-    uint32_t sparse_index_step
+    uint32_t sparse_index_step,
+    std::size_t row_block_target_bytes
+)
+    : RowSSTableBuilder(
+        schema,
+        sstable_dir,
+        SparseIndexOptions{.fixed_step = sparse_index_step},
+        row_block_target_bytes
+    )
+{}
+
+RowSSTableBuilder::RowSSTableBuilder(
+    const Schema& schema,
+    const std::filesystem::path& sstable_dir,
+    SparseIndexOptions sparse_index_options,
+    std::size_t row_block_target_bytes
 )
     : schema_(schema)
     , paths_(sstable_dir)
     , data_writer_(data_file_)
     , meta_writer_(meta_file_)
     , index_writer_(index_file_)
-    , block_builder_(schema)
-    , sparse_index_step_(sparse_index_step)
+    , block_builder_(schema, row_block_target_bytes)
+    , sparse_index_options_(sparse_index_options)
     , global_min_(std::numeric_limits<Key>::max())
     , global_max_(std::numeric_limits<Key>::min())
     , last_key_(0)
     , first_row_(true)
 {
+    if (sparse_index_options_.min_step == 0) {
+        throw std::runtime_error("RowSSTableBuilder: sparse index min step must be positive");
+    }
+
+    if (sparse_index_options_.max_step < sparse_index_options_.min_step) {
+        throw std::runtime_error("RowSSTableBuilder: sparse index max step must be >= min step");
+    }
 
     std::filesystem::create_directories(paths_.dir());
 
@@ -93,16 +115,10 @@ void RowSSTableBuilder::flush_block() {
     meta_writer_.write_u32(meta.row_count);
     meta_writer_.write_u32(meta.block_id);
 
-    // SPARSE INDEX
-
-    if (block_id_ % sparse_index_step_ == 0) {
-        SparseIndexEntry sparse_idx_entry{
-            .min_key = meta.min_key,
-            .block_id = meta.block_id
-        };
-        index_writer_.write_i64(sparse_idx_entry.min_key);
-        index_writer_.write_u32(sparse_idx_entry.block_id);
-    }
+    sparse_index_candidates_.push_back(SparseIndexEntry{
+        .min_key = meta.min_key,
+        .block_id = meta.block_id
+    });
 
     LOG_INFO(
         "SSTableBuilder: flushed block id={}, rows={}, min_key={}, max_key={}, size={}",
@@ -130,6 +146,21 @@ void RowSSTableBuilder::write_info_file() {
     writer.write_u8(static_cast<uint8_t>(SSTLayout::ROW));
 
     info_file.flush();
+}
+
+void RowSSTableBuilder::write_sparse_index_file() {
+    const auto effective_step = choose_sparse_index_step(block_id_, sparse_index_options_);
+
+    for (const auto& entry : sparse_index_candidates_) {
+        if (entry.block_id % effective_step != 0) {
+            continue;
+        }
+
+        index_writer_.write_i64(entry.min_key);
+        index_writer_.write_u32(entry.block_id);
+    }
+
+    index_file_.flush();
 }
 
 void RowSSTableBuilder::write_stats_file() {
@@ -250,6 +281,7 @@ SSTableBuildResult RowSSTableBuilder::finish() {
         flush_block();
 
     write_info_file();
+    write_sparse_index_file();
     write_stats_file();
 
     data_file_.flush();

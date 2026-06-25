@@ -8,10 +8,19 @@
 using namespace htap::lsmtree::sstable;
 using namespace htap::storage;
 
-ColumnSSTBlockBuilder::ColumnSSTBlockBuilder(const Column& column, uint16_t column_id)
+ColumnSSTBlockBuilder::ColumnSSTBlockBuilder(
+    const Column& column,
+    uint16_t column_id,
+    std::size_t target_block_size_bytes
+)
     : column_(column)
     , column_id_(column_id)
+    , target_block_size_bytes_(target_block_size_bytes)
 {
+    if (target_block_size_bytes_ == 0) {
+        throw std::runtime_error("ColumnSSTBlockBuilder: target block size must be positive");
+    }
+
     reset();
 }
 
@@ -67,7 +76,7 @@ void ColumnSSTBlockBuilder::add(const Row& row) {
 
     values_count_++;
 
-    if (size_bytes() >= TARGET_BLOCK_SIZE_BYTES)
+    if (size_bytes() >= target_block_size_bytes_)
         full_ = true;
 }
 

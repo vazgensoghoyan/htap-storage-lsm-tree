@@ -8,6 +8,7 @@
 
 #include "lsmtree/sstable/build/column_sstable_builder.hpp"
 #include "lsmtree/sstable/build/row_sstable_builder.hpp"
+#include "lsmtree/sstable/build/sparse_index_options.hpp"
 #include "lsmtree/sstable/format/sst_layout.hpp"
 
 #include "storage/api/cursor_interface.hpp"
@@ -47,11 +48,25 @@ std::vector<ValueType> schema_types(const Schema& schema) {
     return types;
 }
 
+SparseIndexOptions sparse_index_options_from_config(const StorageConfig& config) {
+    return SparseIndexOptions{
+        .fixed_step = config.sparse_index_step,
+        .target_index_bytes = config.sparse_index_target_bytes,
+        .min_step = config.sparse_index_min_step,
+        .max_step = config.sparse_index_max_step
+    };
+}
+
 } // namespace
 
-CompactionJob::CompactionJob(const Schema& schema, const std::string& table_path)
+CompactionJob::CompactionJob(
+    const Schema& schema,
+    const std::string& table_path,
+    const StorageConfig& config
+)
     : schema_(schema)
     , table_path_(table_path)
+    , config_(config)
 {}
 
 std::string CompactionJob::build_sst_path(uint64_t sst_id) const {
@@ -121,11 +136,18 @@ SSTableInfo CompactionJob::run(
 
     // 2. Пишем новый SST с нужным layout
     const std::string new_path = build_sst_path(new_sst_id);
+    const auto sparse_index_options = sparse_index_options_from_config(config_);
 
     SSTableBuildResult build_result;
 
     if (task.output_layout == SSTLayout::COLUMN) {
-        ColumnSSTableBuilder builder(schema_, new_path);
+        ColumnSSTableBuilder builder(
+            schema_,
+            new_path,
+            sparse_index_options,
+            config_.column_block_target_rows,
+            config_.column_block_target_bytes
+        );
         while (merged->valid()) {
             Row row(schema_.size());
             row[KEY_COLUMN_INDEX] = merged->key();
@@ -137,7 +159,12 @@ SSTableInfo CompactionJob::run(
         }
         build_result = builder.finish();
     } else {
-        RowSSTableBuilder builder(schema_, new_path);
+        RowSSTableBuilder builder(
+            schema_,
+            new_path,
+            sparse_index_options,
+            config_.row_block_target_bytes
+        );
         while (merged->valid()) {
             Row row(schema_.size());
             row[KEY_COLUMN_INDEX] = merged->key();
