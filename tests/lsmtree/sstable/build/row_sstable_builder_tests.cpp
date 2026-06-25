@@ -4,8 +4,7 @@
 #include <vector>
 #include <stdexcept>
 
-#include "lsmtree/sstable/build/sstable_builder.hpp"
-#include "lsmtree/sstable/build/sst_footer.hpp"
+#include "lsmtree/sstable/build/row_sstable_builder.hpp"
 #include "storage/model/schema_builder.hpp"
 
 #include "lsmtree/sstable/format/sparse_index_entry.hpp"
@@ -65,7 +64,7 @@ TEST(SSTableBuilderTest, CreatesAllFiles) {
     cleanup(dir);
 
     auto schema = make_test_schema();
-    SSTableBuilder builder(schema, dir, 3);
+    RowSSTableBuilder builder(schema, dir, 3);
 
     for (int i = 0; i < 50; ++i) {
         builder.add(make_row(i));
@@ -87,7 +86,7 @@ TEST(SSTableBuilderTest, EnforcesSortedInput) {
     cleanup(dir);
 
     auto schema = make_test_schema();
-    SSTableBuilder builder(schema, dir, 2);
+    RowSSTableBuilder builder(schema, dir, 2);
 
     builder.add(make_row(10));
     builder.add(make_row(20));
@@ -102,7 +101,7 @@ TEST(SSTableBuilderTest, GlobalMinMaxCorrect) {
     cleanup(dir);
 
     auto schema = make_test_schema();
-    SSTableBuilder builder(schema, dir, 2);
+    RowSSTableBuilder builder(schema, dir, 2);
 
     for (int i = 100; i < 200; ++i) {
         builder.add(make_row(i));
@@ -123,7 +122,7 @@ TEST(SSTableBuilderTest, SparseIndexIsValid) {
     cleanup(dir);
 
     auto schema = make_test_schema();
-    SSTableBuilder builder(schema, dir, 5);
+    RowSSTableBuilder builder(schema, dir, 5);
 
     for (int i = 0; i < 50; ++i) {
         builder.add(make_row(i));
@@ -151,7 +150,7 @@ TEST(SSTableBuilderTest, ProducesMultipleBlocks) {
     cleanup(dir);
 
     auto schema = make_test_schema();
-    SSTableBuilder builder(schema, dir, 1);
+    RowSSTableBuilder builder(schema, dir, 1);
 
     for (int i = 0; i < 5000; ++i) {
         builder.add(make_row(i));
@@ -171,7 +170,7 @@ TEST(SSTableBuilderTest, EmptySSTThrows) {
     cleanup(dir);
 
     auto schema = make_test_schema();
-    SSTableBuilder builder(schema, dir, 2);
+    RowSSTableBuilder builder(schema, dir, 2);
 
     EXPECT_THROW(builder.finish(), std::runtime_error);
 }
@@ -183,7 +182,7 @@ TEST(SSTableBuilderTest, BlockOffsetsMonotonic) {
     cleanup(dir);
 
     auto schema = make_test_schema();
-    SSTableBuilder builder(schema, dir, 3);
+    RowSSTableBuilder builder(schema, dir, 3);
 
     for (int i = 0; i < 200; ++i) {
         builder.add(make_row(i));
@@ -225,7 +224,7 @@ TEST(SSTableBuilderTest, BlockSplittingWorks) {
     cleanup(dir);
 
     auto schema = make_test_schema();
-    SSTableBuilder builder(schema, dir, 10);
+    RowSSTableBuilder builder(schema, dir, 10);
 
     for (int i = 0; i < 20000; ++i) {
         builder.add(make_row(i));

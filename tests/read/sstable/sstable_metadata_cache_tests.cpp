@@ -5,7 +5,7 @@
 #include <fstream>
 #include <string>
 
-#include "lsmtree/sstable/build/sstable_builder.hpp"
+#include "lsmtree/sstable/build/row_sstable_builder.hpp"
 #include "lsmtree/sstable/metadata/sstable_info.hpp"
 #include "storage/model/schema_builder.hpp"
 #include "storage/read/sstable/sstable_metadata_cache.hpp"
@@ -80,7 +80,7 @@ TEST(SSTableMetadataCacheTest, ReadsRowMetadataThroughPagedCache) {
     TempSSTableDir dir("htap_sstable_metadata_cache_row_metadata");
     const auto schema = make_schema();
 
-    SSTableBuilder builder(schema, dir.path(), 1);
+    RowSSTableBuilder builder(schema, dir.path(), 1);
     for (std::int64_t id = 0; id < 400; ++id) {
         builder.add(make_row(id));
     }
@@ -112,7 +112,7 @@ TEST(SSTableMetadataCacheTest, ReadsNumericStatsThroughPagedCache) {
     TempSSTableDir dir("htap_sstable_metadata_cache_numeric_stats");
     const auto schema = make_schema();
 
-    SSTableBuilder builder(schema, dir.path(), 1);
+    RowSSTableBuilder builder(schema, dir.path(), 1);
     for (std::int64_t id = 0; id < 500; ++id) {
         builder.add(make_row(id));
     }
@@ -156,7 +156,7 @@ TEST(SSTableMetadataCacheTest, MissingStatsColumnIsCachedConservatively) {
     TempSSTableDir dir("htap_sstable_metadata_cache_missing_stats");
     const auto schema = make_schema();
 
-    SSTableBuilder builder(schema, dir.path(), 1);
+    RowSSTableBuilder builder(schema, dir.path(), 1);
     for (std::int64_t id = 0; id < 100; ++id) {
         builder.add(make_row(id));
     }

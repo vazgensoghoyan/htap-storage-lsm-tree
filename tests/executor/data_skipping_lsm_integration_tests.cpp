@@ -87,7 +87,10 @@ std::unique_ptr<parser::SelectItem> select_item(std::unique_ptr<parser::Expressi
 
 TEST(DataSkippingLsmIntegrationTest, ExecutorQueryReturnsCorrectRowsWithSSTableStatsPresent) {
     TempDir dir("htap_data_skipping_lsm_integration");
-    storage::LSMStorageEngine storage(dir.path().string(), 50);
+    storage::LSMStorageEngine storage(storage::StorageConfig{
+        .root_path = dir.path().string(),
+        .memtable_threshold = 50,
+    });
     storage.create_table("users", make_schema());
 
     for (std::int64_t id = 0; id < 120; ++id) {
@@ -98,6 +101,8 @@ TEST(DataSkippingLsmIntegrationTest, ExecutorQueryReturnsCorrectRowsWithSSTableS
         row.push_back(std::string("user_" + std::to_string(id)));
         storage.insert("users", row);
     }
+
+    storage.wait_for_compaction("users");
 
     ASSERT_TRUE(std::filesystem::exists(dir.path() / "users" / "sst_00000000000000000000.sst" / "stats.bin"));
 

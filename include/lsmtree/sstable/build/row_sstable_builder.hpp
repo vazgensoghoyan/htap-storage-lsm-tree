@@ -3,27 +3,21 @@
 #include <filesystem>
 #include <fstream>
 
+#include "lsmtree/sstable/build/sstable_build_result.hpp"
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
 #include "storage/read/sstable/numeric_stats.hpp"
 
 #include "lsmtree/sstable/build/row_sst_block_builder.hpp"
-#include "lsmtree/sstable/build/sst_footer.hpp"
 #include "lsmtree/sstable/sstable_paths.hpp"
 
 #include "utils/binary_writer.hpp"
 
 namespace htap::lsmtree::sstable {
 
-struct SSTableBuildResult {
-    storage::Key min_key;
-    storage::Key max_key;
-    uint32_t num_blocks;
-};
-
-class SSTableBuilder {
+class RowSSTableBuilder {
 public:
-    SSTableBuilder(
+    RowSSTableBuilder(
         const storage::Schema& schema,
         const std::filesystem::path& sstable_dir,
         uint32_t sparse_index_step = 1000 // TODO

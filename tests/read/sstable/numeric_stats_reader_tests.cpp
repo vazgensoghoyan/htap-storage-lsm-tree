@@ -6,7 +6,7 @@
 #include <optional>
 #include <string>
 
-#include "lsmtree/sstable/build/sstable_builder.hpp"
+#include "lsmtree/sstable/build/row_sstable_builder.hpp"
 #include "storage/model/schema_builder.hpp"
 #include "storage/read/sstable/sstable_reader.hpp"
 
@@ -66,7 +66,7 @@ TEST(NumericStatsReaderTest, ReadsStatsForRequestedColumnsAndRanges) {
     TempSSTableDir dir("htap_numeric_stats_reader_roundtrip");
     const auto schema = make_schema();
 
-    SSTableBuilder builder(schema, dir.path(), 1);
+    RowSSTableBuilder builder(schema, dir.path(), 1);
     for (std::int64_t id = 0; id < 1500; ++id) {
         builder.add(make_row(id));
     }

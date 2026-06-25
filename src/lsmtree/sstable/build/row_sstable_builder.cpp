@@ -1,4 +1,4 @@
-#include "lsmtree/sstable/build/sstable_builder.hpp"
+#include "lsmtree/sstable/build/row_sstable_builder.hpp"
 
 #include <filesystem>
 #include <algorithm>
@@ -13,7 +13,7 @@
 using namespace htap::storage;
 using namespace htap::lsmtree::sstable;
 
-SSTableBuilder::SSTableBuilder(
+RowSSTableBuilder::RowSSTableBuilder(
     const Schema& schema,
     const std::filesystem::path& sstable_dir,
     uint32_t sparse_index_step
@@ -43,7 +43,7 @@ SSTableBuilder::SSTableBuilder(
     LOG_INFO("SSTableBuilder: opened {}", paths_.dir().string());
 }
 
-void SSTableBuilder::add(const Row& row) {
+void RowSSTableBuilder::add(const Row& row) {
     if (finished_)
         throw std::runtime_error("SSTable already finished");
 
@@ -66,7 +66,7 @@ void SSTableBuilder::add(const Row& row) {
     global_max_ = std::max(global_max_, key);
 }
 
-void SSTableBuilder::flush_block() {
+void RowSSTableBuilder::flush_block() {
     auto result = block_builder_.finish();
 
     const uint64_t block_offset = data_offset_;
@@ -116,7 +116,7 @@ void SSTableBuilder::flush_block() {
     ++block_id_;
 }
 
-void SSTableBuilder::write_info_file() {
+void RowSSTableBuilder::write_info_file() {
     std::ofstream info_file(paths_.info(), std::ios::binary);
 
     if (!info_file)
@@ -132,7 +132,7 @@ void SSTableBuilder::write_info_file() {
     info_file.flush();
 }
 
-void SSTableBuilder::write_stats_file() {
+void RowSSTableBuilder::write_stats_file() {
     std::ofstream stats_file(paths_.stats(), std::ios::binary);
 
     if (!stats_file) {
@@ -239,7 +239,7 @@ void SSTableBuilder::write_stats_file() {
     stats_file.flush();
 }
 
-SSTableBuildResult SSTableBuilder::finish() {
+SSTableBuildResult RowSSTableBuilder::finish() {
     if (finished_)
         throw std::runtime_error("Already finished building SSTable");
 
