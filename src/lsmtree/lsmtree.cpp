@@ -1,9 +1,10 @@
 #include "lsmtree/lsmtree.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <format>
-#include <limits>
-#include <stdexcept>
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "utils/logger.hpp"
@@ -46,13 +47,42 @@ uint64_t sstable_size_bytes(const std::filesystem::path& sstable_dir) {
          + file_size_if_exists(paths.info());
 }
 
+/**
+ * Курсор-обёртка, продлевающая жизнь backing-данных memtable.
+ *
+ * ImmutableMemTableCursor держат лишь итераторы в их вектор и НЕ владеют им. Фоновый worker может вытолкнуть
+ * immutable из очереди и убрать её, пока scan ещё итерируется. Чтобы данные пережили курсор, PinnedCursor co-владеет
+ * shared_ptr на используемые immutable memtable. Сами вызовы делегируются вложенному курсору.
+ */
+class PinnedCursor final : public ICursor {
+public:
+    PinnedCursor(
+        std::unique_ptr<ICursor> inner,
+        std::vector<MemoryLayer::ImmPtr> pins
+    )
+        : inner_(std::move(inner))
+        , pins_(std::move(pins))
+    {}
+
+    bool valid() const override { return inner_->valid(); }
+    void next() override { inner_->next(); }
+    Key key() const override { return inner_->key(); }
+    NullableValue value(std::size_t column_idx) const override {
+        return inner_->value(column_idx);
+    }
+
+private:
+    std::unique_ptr<ICursor> inner_;
+    std::vector<MemoryLayer::ImmPtr> pins_;
+};
+
 } // namespace
 
 LSMTree::LSMTree(const Schema& schema, const StorageConfig& config)
     : schema_(schema)
     , config_(config)
     , memory_layer_(config.memtable_threshold)
-    , compaction_policy_(config)
+    , compaction_policy_(config_)
 {
     std::filesystem::create_directories(config_.root_path);
 
@@ -60,6 +90,20 @@ LSMTree::LSMTree(const Schema& schema, const StorageConfig& config)
     sstable::SSTableManifest::load(config_.root_path, registry_, next_sst_id_);
 
     LOG_INFO("LSMTree initialized at path={}, next_sst_id={}", config_.root_path, next_sst_id_);
+
+    // Запускаем фоновый worker-поток для compaction/flush задач
+    worker_ = std::thread(&LSMTree::compaction_worker_loop, this);
+}
+
+LSMTree::~LSMTree() {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        stop_ = true;
+    }
+    worker_cv_.notify_all();
+    if (worker_.joinable()) {
+        worker_.join();
+    }
 }
 
 const Schema& LSMTree::schema() const noexcept {
@@ -67,8 +111,11 @@ const Schema& LSMTree::schema() const noexcept {
 }
 
 void LSMTree::insert(const Row& row) {
-    memory_layer_.insert(row);
-    flush_memtable();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        memory_layer_.insert(row);
+    }
+    worker_cv_.notify_one();
 }
 
 std::unique_ptr<ICursor> LSMTree::scan(
@@ -77,112 +124,186 @@ std::unique_ptr<ICursor> LSMTree::scan(
     storage::ScanOrder order
 ) const {
     std::vector<std::unique_ptr<ICursor>> cursors;
+    std::vector<MemoryLayer::ImmPtr> pins;
 
-    // Active memtable
-    const auto& active = memory_layer_.active();
-    auto active_begin = range.from ? active.lower_bound(*range.from) : active.begin();
-    auto active_end   = range.to   ? active.lower_bound(*range.to)   : active.end();
-    if (active_begin != active_end) {
-        cursors.push_back(std::make_unique<cursor::ActiveMemTableCursor>(
-            active_begin, active_end
-        ));
-    }
+    {
+        // Снимок состояния под mutex_
 
-    // Immutable memtables
-    for (const auto& immutable : memory_layer_.immutables()) {
-        auto imm_begin = range.from ? immutable->lower_bound(*range.from) : immutable->begin();
-        auto imm_end   = range.to   ? immutable->lower_bound(*range.to)   : immutable->end();
-        if (imm_begin != imm_end) {
-            cursors.push_back(std::make_unique<cursor::ImmutableMemTableCursor>(
-                imm_begin, imm_end
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        // Active memtable
+        const auto& active = memory_layer_.active();
+        auto active_begin = range.from ? active.lower_bound(*range.from) : active.begin();
+        auto active_end   = range.to   ? active.lower_bound(*range.to)   : active.end();
+        if (active_begin != active_end) {
+            cursors.push_back(std::make_unique<cursor::ActiveMemTableCursor>(
+                active_begin, active_end
             ));
         }
-    }
 
-    // SSTables (all levels)
-    const auto schema_types = extract_schema_types(schema_);
-    for (std::size_t level = 0; level < registry_.level_count(); ++level) {
-        const auto sstables = registry_.overlapping(
-            static_cast<uint32_t>(level),
-            range.from,
-            range.to
-        );
-        for (const auto& info : sstables) {
-            auto cursor = read::sstable::make_sstable_cursor(
-                info, range, schema_types, projection
+        // Immutable memtables — co-владеем через shared_ptr (pins)
+        for (const auto& immutable : memory_layer_.immutables()) {
+            auto imm_begin = range.from ? immutable->lower_bound(*range.from) : immutable->begin();
+            auto imm_end   = range.to   ? immutable->lower_bound(*range.to)   : immutable->end();
+            if (imm_begin != imm_end) {
+                cursors.push_back(std::make_unique<cursor::ImmutableMemTableCursor>(
+                    imm_begin, imm_end
+                ));
+                pins.push_back(immutable);
+            }
+        }
+
+        // SSTables (all levels)
+        const auto schema_types = extract_schema_types(schema_);
+        for (std::size_t level = 0; level < registry_.level_count(); ++level) {
+            const auto sstables = registry_.overlapping(
+                static_cast<uint32_t>(level),
+                range.from,
+                range.to
             );
-            if (cursor && cursor->valid()) {
-                cursors.push_back(std::move(cursor));
+            for (const auto& info : sstables) {
+                auto cursor = read::sstable::make_sstable_cursor(
+                    info, range, schema_types, projection
+                );
+                if (cursor && cursor->valid()) {
+                    cursors.push_back(std::move(cursor));
+                }
             }
         }
     }
 
-    return cursor::compose_cursors(std::move(cursors), order);
+    auto composed = cursor::compose_cursors(std::move(cursors), order);
+
+    if (pins.empty()) {
+        return composed;
+    }
+    return std::make_unique<PinnedCursor>(std::move(composed), std::move(pins));
 }
 
-void LSMTree::flush_memtable() {
-    auto imm = memory_layer_.pop_immutable();
-    if (!imm) return;
+void LSMTree::wait_for_compaction() {
+    // Подталкиваем worker, чтобы не ждать конца интервала опроса.
+    worker_cv_.notify_one();
+
+    std::unique_lock<std::mutex> lock(mutex_);
+    idle_cv_.wait(lock, [this] {
+        return stop_ || (!worker_busy_ && !has_pending_work_locked());
+    });
+}
+
+void LSMTree::compaction_worker_loop() {
+    std::unique_lock<std::mutex> lock(mutex_);
+
+    const auto interval = std::chrono::milliseconds(
+        static_cast<long long>(config_.compaction_interval_ms)
+    );
+
+    while (true) {
+        // Просыпаемся по таймауту или по сигналу
+        worker_cv_.wait_for(lock, interval, [this] {
+            return stop_ || has_pending_work_locked();
+        });
+
+        if (stop_) break;
+
+        worker_busy_ = true;
+
+        while (!stop_ && has_pending_work_locked()) {
+            if (flush_one_locked(lock)) continue;
+            if (compact_one_locked(lock)) continue;
+            break;
+        }
+
+        worker_busy_ = false;
+
+        if (!has_pending_work_locked()) {
+            idle_cv_.notify_all();
+        }
+    }
+
+    idle_cv_.notify_all();
+}
+
+bool LSMTree::has_pending_work_locked() const {
+    if (memory_layer_.immutable_count() > 0) {
+        return true;
+    }
+    return compaction_policy_.pick(registry_).has_value();
+}
+
+bool LSMTree::flush_one_locked(std::unique_lock<std::mutex>& lock) {
+    auto imm = memory_layer_.front_immutable();
+    if (!imm) return false;
+
+    if (imm->size() == 0) {
+        memory_layer_.pop_front_immutable();
+        return true;
+    }
 
     const uint64_t sst_id = next_sst_id_++;
     const std::string sst_path = build_sst_path(sst_id);
 
     LOG_INFO("Flushing SSTable id={} to {}", sst_id, sst_path);
 
-    sstable::RowSSTableBuilder builder(schema_, sst_path);
+    lock.unlock();
+
+    sstable::RowSSTableBuilder builder(schema_, sst_path, config_.sparse_index_step);
     for (const auto& row : imm->data()) {
         builder.add(row);
     }
-    sstable::SSTableBuildResult build_result = builder.finish();
+    const sstable::SSTableBuildResult build_result = builder.finish();
+    const uint64_t file_size = sstable_size_bytes(sst_path);
 
-    // Flush всегда идёт на level=0, layout=ROW
-    const uint32_t level        = 0;
-    const sstable::SSTLayout layout = sstable::SSTLayout::ROW;
+    lock.lock();
 
+    // flush всегда на level=0, layout=ROW.
     sstable::SSTableInfo info{
         .id              = sst_id,
         .path            = sst_path,
-        .level           = level,
+        .level           = 0,
         .min_key         = build_result.min_key,
         .max_key         = build_result.max_key,
-        .file_size_bytes = sstable_size_bytes(sst_path),
+        .file_size_bytes = file_size,
         .num_blocks      = build_result.num_blocks,
-        .layout          = layout
+        .layout          = sstable::SSTLayout::ROW
     };
 
     registry_.add(info);
-    save_manifest();
+    memory_layer_.pop_front_immutable();
+    save_manifest_locked();
 
     LOG_INFO("SSTable registered id={}, keys=[{}, {}]", info.id, info.min_key, info.max_key);
 
-    maybe_compact();
+    return true;
 }
 
-void LSMTree::maybe_compact() {
+bool LSMTree::compact_one_locked(std::unique_lock<std::mutex>& lock) {
     auto task = compaction_policy_.pick(registry_);
-    if (!task) return;
+    if (!task) return false;
 
     const auto candidates = registry_.sstables_at_level(task->src_level);
-    if (candidates.empty()) return;
+    if (candidates.empty()) return false;
+
+    const uint64_t new_id = next_sst_id_++;
 
     LOG_INFO(
         "Compaction triggered: L{}→L{}, candidates={}",
         task->src_level, task->dst_level, candidates.size()
     );
 
+    lock.unlock();
+
     CompactionJob job(schema_, config_.root_path);
-    const uint64_t new_id = next_sst_id_++;
+    const sstable::SSTableInfo new_info = job.run(candidates, *task, new_id);
 
-    sstable::SSTableInfo new_info = job.run(candidates, *task, new_id);
+    lock.lock();
 
-    // Атомарная замена в реестре
     registry_.add(new_info);
     for (const auto& old_sst : candidates) {
         registry_.remove(old_sst.id);
         delete_sst_files(old_sst.id);
     }
 
-    save_manifest();
+    save_manifest_locked();
 
     LOG_INFO(
         "Compaction done: new SST id={}, L{}, layout={}, keys=[{}, {}]",
@@ -191,11 +312,10 @@ void LSMTree::maybe_compact() {
         new_info.min_key, new_info.max_key
     );
 
-    // Рекурсивно проверяем нужен ли ещё compaction (cascade)
-    maybe_compact();
+    return true;
 }
 
-void LSMTree::save_manifest() const {
+void LSMTree::save_manifest_locked() const {
     sstable::SSTableManifest::save(config_.root_path, registry_, next_sst_id_);
 }
 
@@ -210,3 +330,4 @@ void LSMTree::delete_sst_files(uint64_t sst_id) const {
         LOG_INFO("Deleted SSTable files: {}", sst_dir);
     }
 }
+

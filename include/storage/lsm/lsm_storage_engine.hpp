@@ -15,7 +15,7 @@ namespace htap::storage {
 
 class LSMStorageEngine final : public IStorageEngine {
 public:
-    explicit LSMStorageEngine(htap::lsmtree::StorageConfig config);
+    explicit LSMStorageEngine(StorageConfig config);
 
     void create_table(const std::string& table_name, const Schema& schema) override;
 
@@ -37,16 +37,16 @@ public:
         const std::vector<size_t>& projection,
         ScanOrder order = ScanOrder::Unordered) const override;
 
+    void wait_for_compaction(const std::string& table_name);
+
 private:
-    htap::lsmtree::LSMTree& get_tree(const std::string& table_name);
-    const htap::lsmtree::LSMTree& get_tree(const std::string& table_name) const;
+    lsmtree::LSMTree& get_tree(const std::string& table_name);
+    const lsmtree::LSMTree& get_tree(const std::string& table_name) const;
 
     std::string table_path(const std::string& table_name) const;
 
 private:
-    std::string root_path_;
-    std::size_t memtable_threshold_;
-    htap::lsmtree::StorageConfig config_;
+    StorageConfig config_;
     std::unordered_map<std::string, std::unique_ptr<htap::lsmtree::LSMTree>> tables_;
 };
 

@@ -2,7 +2,6 @@
 
 #include <deque>
 #include <memory>
-#include <optional>
 
 #include "storage/api/types.hpp"
 
@@ -11,29 +10,32 @@
 
 namespace htap::lsmtree {
 
-inline constexpr size_t DEFAULT_MEMTABLE_THRESHOLD = 10000;
-
 class MemoryLayer {
 public:
-    MemoryLayer(size_t threshold = DEFAULT_MEMTABLE_THRESHOLD);
+    // shared чтобы worker мог flush-ить и cursor одновременно использовать
+    using ImmPtr = std::shared_ptr<ImmutableMemTable>;
+
+    MemoryLayer(size_t threshold);
 
     void insert(const storage::Row& row);
 
-    void force_freeze();
+    void active_to_immutable();
 
     size_t immutable_count() const;
 
-    std::unique_ptr<ImmutableMemTable> pop_immutable();
+    ImmPtr front_immutable() const;
+
+    ImmPtr pop_front_immutable();
 
     const MemTable& active() const noexcept;
 
-    const std::deque<std::unique_ptr<ImmutableMemTable>>& immutables() const noexcept;
+    const std::deque<ImmPtr>& immutables() const noexcept;
 
 private:
     size_t threshold_;
 
     std::unique_ptr<MemTable> active_;
-    std::deque<std::unique_ptr<ImmutableMemTable>> immutables_;
+    std::deque<ImmPtr> immutables_;
 };
 
 } // namespace htap::lsmtree
