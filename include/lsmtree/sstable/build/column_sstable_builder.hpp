@@ -54,6 +54,7 @@ private:
     );
 
     void write_info_file();
+    void write_stats_file();
 
     bool any_col_builder_full() const;
 
@@ -72,6 +73,7 @@ private:
     
     std::vector<ColumnSSTBlockBuilder> col_builders_; // builders для value-колонок (schema index 1..N-1)
     std::vector<storage::Key> key_buffer_;            // буфер ключей текущего logical block
+    std::vector<std::vector<storage::read::sstable::NumericBlockStats>> block_numeric_stats_;
 
     uint32_t sparse_index_step_;
     uint64_t data_offset_ = 0;
