@@ -91,8 +91,9 @@ LSMTree::LSMTree(const Schema& schema, const StorageConfig& config)
 
     LOG_INFO("LSMTree initialized at path={}, next_sst_id={}", config_.root_path, next_sst_id_);
 
-    // Запускаем фоновый worker-поток для compaction/flush задач
-    worker_ = std::thread(&LSMTree::compaction_worker_loop, this);
+    if (config_.is_compaction_background) {
+        worker_ = std::thread(&LSMTree::compaction_worker_loop, this);
+    }
 }
 
 LSMTree::~LSMTree() {
@@ -111,11 +112,15 @@ const Schema& LSMTree::schema() const noexcept {
 }
 
 void LSMTree::insert(const Row& row) {
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        memory_layer_.insert(row);
+    std::unique_lock<std::mutex> lock(mutex_);
+    memory_layer_.insert(row);
+
+    if (config_.is_compaction_background) {
+        lock.unlock();
+        worker_cv_.notify_one();
+    } else {
+        drain_work_locked(lock);
     }
-    worker_cv_.notify_one();
 }
 
 std::unique_ptr<ICursor> LSMTree::scan(
@@ -181,13 +186,28 @@ std::unique_ptr<ICursor> LSMTree::scan(
 }
 
 void LSMTree::wait_for_compaction() {
-    // Подталкиваем worker, чтобы не ждать конца интервала опроса.
-    worker_cv_.notify_one();
-
     std::unique_lock<std::mutex> lock(mutex_);
+
+    if (!config_.is_compaction_background) {
+        drain_work_locked(lock);
+        return;
+    }
+
+    lock.unlock();
+    worker_cv_.notify_one();
+    lock.lock();
+
     idle_cv_.wait(lock, [this] {
         return stop_ || (!worker_busy_ && !has_pending_work_locked());
     });
+}
+
+void LSMTree::drain_work_locked(std::unique_lock<std::mutex>& lock) {
+    while (!stop_ && has_pending_work_locked()) {
+        if (flush_one_locked(lock)) continue;
+        if (compact_one_locked(lock)) continue;
+        break;
+    }
 }
 
 void LSMTree::compaction_worker_loop() {
@@ -206,13 +226,7 @@ void LSMTree::compaction_worker_loop() {
         if (stop_) break;
 
         worker_busy_ = true;
-
-        while (!stop_ && has_pending_work_locked()) {
-            if (flush_one_locked(lock)) continue;
-            if (compact_one_locked(lock)) continue;
-            break;
-        }
-
+        drain_work_locked(lock);
         worker_busy_ = false;
 
         if (!has_pending_work_locked()) {

@@ -11,12 +11,22 @@ jobs:
   testing:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        background_compaction: [ON, OFF]
+
+    name: testing (HTAP_BACKGROUND_COMPACTION=${{ matrix.background_compaction }})
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DHTAP_BACKGROUND_COMPACTION=${{ matrix.background_compaction }}
 
       - name: Build
         run: cmake --build build --parallel

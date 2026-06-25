@@ -58,6 +58,12 @@ private:
     // политика хочет compaction. Вызывать под mutex_.
     bool has_pending_work_locked() const;
 
+    // Разгрести всю отложенную работу: сначала flush очереди immutable,
+    // затем каскад compaction между уровнями. Общий код для фонового
+    // worker-а и синхронного режима. Вызывается с захваченным lock; на
+    // время дисковой записи lock временно отпускается внутри flush/compact.
+    void drain_work_locked(std::unique_lock<std::mutex>& lock);
+
     // oldest immutable memtable -> L0 SSTable.
     // Возвращает true, если работа была проделана. Вызывается worker-ом
     // с захваченным lock; на время записи на диск lock временно отпускается.

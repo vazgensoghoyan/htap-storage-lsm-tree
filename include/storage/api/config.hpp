@@ -4,6 +4,10 @@
 #include <cstdint>
 #include <string>
 
+#ifndef HTAP_BACKGROUND_COMPACTION_DEFAULT
+#define HTAP_BACKGROUND_COMPACTION_DEFAULT true
+#endif
+
 namespace htap::storage {
 
 struct StorageConfig {
@@ -36,6 +40,16 @@ struct StorageConfig {
     // Поток просыпается по таймауту ИЛИ по сигналу после flush,
     // проверяет политику и при необходимости выполняет compaction
     std::size_t compaction_interval_ms = 100;
+
+    // Режим выполнения flush/compaction:
+    //   true  — на отдельном фоновом worker-потоке (insert не блокируется
+    //           на время записи SSTable); требует периодического опроса
+    //           либо барьера wait_for_compaction для детерминизма;
+    //   false — синхронно на потоке insert (старое поведение): flush и
+    //           compaction выполняются прямо в insert(), сразу по факту
+    //           переполнения memtable. Worker-поток не создаётся.
+    // Дефолт задаётся на этапе билда (CMake -DHTAP_BACKGROUND_COMPACTION), но может быть переопределён в рантайме перед созданием хранилища
+    bool is_compaction_background = HTAP_BACKGROUND_COMPACTION_DEFAULT;
 };
 
 } // namespace htap::storage
