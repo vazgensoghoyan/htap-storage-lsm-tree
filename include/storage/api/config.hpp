@@ -1,10 +1,10 @@
-#pragma once // lsmtree/config.hpp
+#pragma once // storage/api/config.hpp
 
 #include <cstddef>
 #include <cstdint>
 #include <string>
 
-namespace htap::lsmtree {
+namespace htap::storage {
 
 struct StorageConfig {
     // Корневой путь хранилища (директория под все таблицы)
@@ -31,6 +31,11 @@ struct StorageConfig {
 
     // Шаг sparse index: запись в sparse.idx каждые N logical blocks
     uint32_t sparse_index_step = 1000;
+
+    // Период опроса фонового потока compaction (мс)
+    // Поток просыпается по таймауту ИЛИ по сигналу после flush,
+    // проверяет политику и при необходимости выполняет compaction
+    std::size_t compaction_interval_ms = 100;
 };
 
-} // namespace htap::lsmtree
+} // namespace htap::storage

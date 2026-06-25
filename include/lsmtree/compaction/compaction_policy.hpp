@@ -19,12 +19,12 @@ namespace htap::lsmtree {
  */
 class CompactionPolicy {
 public:
-    explicit CompactionPolicy(const StorageConfig& config);
+    explicit CompactionPolicy(const storage::StorageConfig& config);
 
     std::optional<CompactionTask> pick(const sstable::SSTableRegistry& registry) const;
 
 private:
-    const StorageConfig& config_;
+    const storage::StorageConfig& config_;
 };
 
 } // namespace htap::lsmtree

@@ -6,7 +6,7 @@
 using namespace htap::lsmtree;
 using namespace htap::lsmtree::sstable;
 
-CompactionPolicy::CompactionPolicy(const StorageConfig& config)
+CompactionPolicy::CompactionPolicy(const storage::StorageConfig& config)
     : config_(config)
 {}
 

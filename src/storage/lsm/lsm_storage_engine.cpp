@@ -51,12 +51,9 @@ void validate_row(const Schema& schema, const Row& values) {
 
 } // namespace
 
-LSMStorageEngine::LSMStorageEngine(htap::lsmtree::StorageConfig config)
-    : root_path_(config.root_path)
-    , memtable_threshold_(config.memtable_threshold)
-    , config_(std::move(config))
+LSMStorageEngine::LSMStorageEngine(StorageConfig config) : config_(std::move(config))
 {
-    std::filesystem::create_directories(root_path_);
+    std::filesystem::create_directories(config_.root_path);
 }
 
 void LSMStorageEngine::create_table(
@@ -69,7 +66,7 @@ void LSMStorageEngine::create_table(
 
     const std::string path = table_path(table_name);
 
-    htap::lsmtree::StorageConfig table_config = config_;
+    StorageConfig table_config = config_;
     table_config.root_path = path;
 
     tables_.emplace(
@@ -147,6 +144,10 @@ std::unique_ptr<ICursor> LSMStorageEngine::scan(
     );
 }
 
+void LSMStorageEngine::wait_for_compaction(const std::string& table_name) {
+    get_tree(table_name).wait_for_compaction();
+}
+
 htap::lsmtree::LSMTree& LSMStorageEngine::get_tree(const std::string& table_name) {
     auto it = tables_.find(table_name);
 
@@ -168,5 +169,5 @@ const htap::lsmtree::LSMTree& LSMStorageEngine::get_tree(const std::string& tabl
 }
 
 std::string LSMStorageEngine::table_path(const std::string& table_name) const {
-    return (std::filesystem::path(root_path_) / table_name).string();
+    return (std::filesystem::path(config_.root_path) / table_name).string();
 }
