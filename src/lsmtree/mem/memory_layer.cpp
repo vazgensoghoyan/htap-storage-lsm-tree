@@ -15,7 +15,9 @@ void MemoryLayer::insert(const Row& row) {
 
 void MemoryLayer::active_to_immutable() {
     auto imm = active_->to_sorted_immutable();
+#if HTAP_ENABLE_LOGGING
     const size_t size = imm->size();
+#endif
 
     immutables_.push_back(ImmPtr(std::move(imm)));
 

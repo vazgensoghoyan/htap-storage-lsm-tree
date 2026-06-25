@@ -1,5 +1,6 @@
 #pragma once // lsmtree/sstable/build/column_sst_block_builder.hpp
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -27,7 +28,11 @@ struct ColumnSSTBlockResult {
 
 class ColumnSSTBlockBuilder {
 public:
-    ColumnSSTBlockBuilder(const storage::Column& column, uint16_t column_id);
+    ColumnSSTBlockBuilder(
+        const storage::Column& column,
+        uint16_t column_id,
+        std::size_t target_block_size_bytes = 4 * 1024
+    );
 
     void add(const storage::Row& row);
 
@@ -61,8 +66,7 @@ private:
     bool full_;
 
     std::vector<storage::read::sstable::NumericBlockStats> numeric_stats_;
-
-    static constexpr size_t TARGET_BLOCK_SIZE_BYTES = 4 * 1024; // 4 KB
+    std::size_t target_block_size_bytes_;
 };
 
 } // namespace htap::lsmtree::sstable

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -11,6 +12,7 @@
 
 #include "lsmtree/compaction/compaction_job.hpp"
 #include "lsmtree/sstable/build/row_sstable_builder.hpp"
+#include "lsmtree/sstable/build/sparse_index_options.hpp"
 #include "lsmtree/sstable/format/sst_layout.hpp"
 #include "lsmtree/sstable/metadata/sstable_manifest.hpp"
 #include "lsmtree/sstable/sstable_paths.hpp"
@@ -47,6 +49,15 @@ uint64_t sstable_size_bytes(const std::filesystem::path& sstable_dir) {
         + file_size_if_exists(paths.index())
         + file_size_if_exists(paths.info())
         + file_size_if_exists(paths.stats());
+}
+
+sstable::SparseIndexOptions sparse_index_options_from_config(const StorageConfig& config) {
+    return sstable::SparseIndexOptions{
+        .fixed_step = config.sparse_index_step,
+        .target_index_bytes = config.sparse_index_target_bytes,
+        .min_step = config.sparse_index_min_step,
+        .max_step = config.sparse_index_max_step
+    };
 }
 
 /**
@@ -86,6 +97,25 @@ LSMTree::LSMTree(const Schema& schema, const StorageConfig& config)
     , memory_layer_(config.memtable_threshold)
     , compaction_policy_(config_)
 {
+    if (config_.sparse_index_min_step == 0) {
+        throw std::runtime_error("LSMTree: sparse index min step must be positive");
+    }
+    if (config_.sparse_index_max_step < config_.sparse_index_min_step) {
+        throw std::runtime_error("LSMTree: sparse index max step must be >= min step");
+    }
+    if (config_.sparse_index_target_bytes == 0 && config_.sparse_index_step == 0) {
+        throw std::runtime_error("LSMTree: adaptive sparse index target bytes must be positive");
+    }
+    if (config_.row_block_target_bytes == 0) {
+        throw std::runtime_error("LSMTree: row block target bytes must be positive");
+    }
+    if (config_.column_block_target_rows == 0) {
+        throw std::runtime_error("LSMTree: column block target rows must be positive");
+    }
+    if (config_.column_block_target_bytes == 0) {
+        throw std::runtime_error("LSMTree: column block target bytes must be positive");
+    }
+
     std::filesystem::create_directories(config_.root_path);
 
     // Восстанавливаем реестр из manifest (если есть)
@@ -302,7 +332,12 @@ bool LSMTree::flush_one_locked(std::unique_lock<std::mutex>& lock) {
 
     lock.unlock();
 
-    sstable::RowSSTableBuilder builder(schema_, sst_path, config_.sparse_index_step);
+    sstable::RowSSTableBuilder builder(
+        schema_,
+        sst_path,
+        sparse_index_options_from_config(config_),
+        config_.row_block_target_bytes
+    );
     for (const auto& row : imm->data()) {
         builder.add(row);
     }
@@ -348,7 +383,7 @@ bool LSMTree::compact_one_locked(std::unique_lock<std::mutex>& lock) {
 
     lock.unlock();
 
-    CompactionJob job(schema_, config_.root_path);
+    CompactionJob job(schema_, config_.root_path, config_);
     const sstable::SSTableInfo new_info = job.run(candidates, *task, new_id);
 
     lock.lock();

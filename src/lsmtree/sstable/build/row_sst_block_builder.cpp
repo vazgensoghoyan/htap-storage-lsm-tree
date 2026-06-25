@@ -8,10 +8,18 @@
 using namespace htap::lsmtree::sstable;
 using namespace htap::storage;
 
-RowSSTBlockBuilder::RowSSTBlockBuilder(const Schema& schema)
+RowSSTBlockBuilder::RowSSTBlockBuilder(
+    const Schema& schema,
+    std::size_t target_block_size_bytes
+)
     : schema_(schema)
     , buffer_()
+    , target_block_size_bytes_(target_block_size_bytes)
 {
+    if (target_block_size_bytes_ == 0) {
+        throw std::runtime_error("RowSSTBlockBuilder: target block size must be positive");
+    }
+
     reset();
 }
 
@@ -72,7 +80,7 @@ void RowSSTBlockBuilder::add(const Row& row) {
     update_numeric_stats(row);
     row_count_++;
 
-    if (buffer_.size() >= TARGET_BLOCK_SIZE_BYTES)
+    if (buffer_.size() >= target_block_size_bytes_)
         full_ = true;
 }
 

@@ -44,10 +44,10 @@ void MockStorageEngine::insert(const std::string& table_name, const Row& values)
 
     Key key = std::get<int64_t>(*cell);
 
-    #ifdef LOGGING_ENABLED
+#if HTAP_ENABLE_LOGGING
     if (table.data.contains(key))
         LOG_WARN("insert overwrite: table='{}', key={}", table_name, key);
-    #endif
+#endif
 
     table.data[key] = values;
 

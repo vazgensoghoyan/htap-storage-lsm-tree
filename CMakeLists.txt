@@ -15,6 +15,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # -----------------------------
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(BUILD_TESTS "Build tests" ON)
+option(HTAP_ENABLE_LOGGING "Enable runtime logging" OFF)
 
 #   -DHTAP_BACKGROUND_COMPACTION=ON  (по умолчанию) — фоновый worker-поток
 #   -DHTAP_BACKGROUND_COMPACTION=OFF — синхронный flush/compaction в insert()
@@ -51,6 +52,12 @@ if (HTAP_BACKGROUND_COMPACTION)
     target_compile_definitions(htap_storage PUBLIC HTAP_BACKGROUND_COMPACTION_DEFAULT=true)
 else()
     target_compile_definitions(htap_storage PUBLIC HTAP_BACKGROUND_COMPACTION_DEFAULT=false)
+endif()
+
+if (HTAP_ENABLE_LOGGING)
+    target_compile_definitions(htap_storage PUBLIC HTAP_ENABLE_LOGGING=1)
+else()
+    target_compile_definitions(htap_storage PUBLIC HTAP_ENABLE_LOGGING=0)
 endif()
 
 # -----------------------------
