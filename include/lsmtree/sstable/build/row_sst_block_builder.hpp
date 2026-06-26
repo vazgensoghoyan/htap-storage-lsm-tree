@@ -1,9 +1,11 @@
 #pragma once // lsmtree/sstable/build/row_sst_block_builder.hpp
 
+#include <cstddef>
 #include <cstdint>
 
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
+#include "storage/read/sstable/numeric_stats.hpp"
 
 namespace htap::lsmtree::sstable {
 
@@ -19,11 +21,15 @@ struct RowBlockMeta {
 struct RowSSTBlockResult {
     std::vector<uint8_t> data;   // бинарный блок
     RowBlockMeta meta;
+    std::vector<storage::read::sstable::NumericBlockStats> numeric_stats;
 };
 
 class RowSSTBlockBuilder {
 public:
-    explicit RowSSTBlockBuilder(const storage::Schema& schema);
+    explicit RowSSTBlockBuilder(
+        const storage::Schema& schema,
+        std::size_t target_block_size_bytes = 4 * 1024
+    );
 
     void add(const storage::Row& row); 
 
@@ -38,6 +44,8 @@ public:
 
 private:
     void encode_row(const storage::Row& row);
+    void reset_numeric_stats();
+    void update_numeric_stats(const storage::Row& row);
 
 private:
     const storage::Schema& schema_;
@@ -51,7 +59,8 @@ private:
 
     bool full_;
 
-    static constexpr size_t TARGET_BLOCK_SIZE_BYTES = 4 * 1024; // 4 КБ
+    std::vector<storage::read::sstable::NumericBlockStats> numeric_stats_;
+    std::size_t target_block_size_bytes_;
 };
 
 } // namespace htap::lsmtree::sstable

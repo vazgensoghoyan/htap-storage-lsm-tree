@@ -27,3 +27,5 @@ Thumbs.db
 
 # logs
 *.log
+
+.cache

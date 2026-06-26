@@ -10,14 +10,17 @@ void MemoryLayer::insert(const Row& row) {
     active_->insert(row);
 
     if (active_->size() < threshold_) return;
-    force_freeze();
+    active_to_immutable();
 }
 
-void MemoryLayer::force_freeze() {
-    auto imm = active_->to_sorted_immutable(); 
-    immutables_.push_back(std::move(imm));
+void MemoryLayer::active_to_immutable() {
+    auto imm = active_->to_sorted_immutable();
+#if HTAP_ENABLE_LOGGING
+    const size_t size = imm->size();
+#endif
 
-    size_t size = immutables_.back()->size();
+    immutables_.push_back(ImmPtr(std::move(imm)));
+
     LOG_INFO("MemTable frozen -> ImmutableMemTable created with {} rows", size);
 
     active_ = std::make_unique<MemTable>();
@@ -27,11 +30,15 @@ size_t MemoryLayer::immutable_count() const {
     return immutables_.size();
 }
 
-std::unique_ptr<ImmutableMemTable> MemoryLayer::pop_immutable() {
-    if (immutables_.empty())
-        return nullptr;
+MemoryLayer::ImmPtr MemoryLayer::front_immutable() const {
+    if (immutables_.empty()) return nullptr;
+    return immutables_.front();
+}
 
-    auto imm = std::move(immutables_.front());
+MemoryLayer::ImmPtr MemoryLayer::pop_front_immutable() {
+    if (immutables_.empty()) return nullptr;
+
+    auto imm = immutables_.front();
     immutables_.pop_front();
 
     LOG_INFO("ImmutableMemTable popped");
@@ -43,6 +50,6 @@ const MemTable& MemoryLayer::active() const noexcept {
     return *active_;
 }
 
-const std::deque<std::unique_ptr<ImmutableMemTable>>& MemoryLayer::immutables() const noexcept {
+const std::deque<MemoryLayer::ImmPtr>& MemoryLayer::immutables() const noexcept {
     return immutables_;
 }

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <vector>
 #include <optional>
@@ -14,7 +15,9 @@
 #include "storage/cursor/sstable_column_cursor.hpp"
 #include "storage/read/sstable/sparse_block_selector.hpp"
 #include "lsmtree/sstable/metadata/sstable_info.hpp"
+#include "storage/read/sstable/sstable_block_cache.hpp"
 #include "storage/read/sstable/sstable_cursor_factory.hpp"
+#include "storage/read/sstable/sstable_metadata_cache.hpp"
 
 namespace fs = std::filesystem;
 
@@ -49,6 +52,20 @@ Row make_row_nullable(Key key, std::optional<int64_t> value, std::optional<doubl
     if (value) row[1] = *value; else row[1] = std::nullopt;
     if (score) row[2] = *score; else row[2] = std::nullopt;
     return row;
+}
+
+// Builds a cursor through the factory, creating per-call metadata/block caches.
+std::unique_ptr<ICursor> make_cursor(
+    const SSTableInfo& info,
+    const read::sstable::KeyRange& range,
+    const std::vector<ValueType>& types,
+    const std::vector<std::size_t>& projection
+) {
+    read::sstable::SSTableMetadataCache metadata_cache(
+        info, static_cast<std::uint32_t>(types.size()));
+    auto block_cache = std::make_shared<read::sstable::SSTableBlockCache>();
+    return read::sstable::make_sstable_cursor(
+        info, metadata_cache, block_cache, range, types, projection);
 }
 
 class ColumnSSTableBuilderTest : public ::testing::Test {
@@ -181,7 +198,7 @@ TEST_F(ColumnSSTableBuilderTest, RoundtripViaColumnCursor) {
     read::sstable::KeyRange range{std::nullopt, std::nullopt};
     std::vector<std::size_t> projection = {0, 1, 2};
 
-    auto cursor = read::sstable::make_sstable_cursor(info, range, schema_types, projection);
+    auto cursor = make_cursor(info, range, schema_types, projection);
     ASSERT_NE(cursor, nullptr);
     ASSERT_TRUE(cursor->valid());
 
@@ -234,7 +251,7 @@ TEST_F(ColumnSSTableBuilderTest, RoundtripWithNullValues) {
     read::sstable::KeyRange range{std::nullopt, std::nullopt};
     std::vector<std::size_t> projection = {0, 1, 2};
 
-    auto cursor = read::sstable::make_sstable_cursor(info, range, schema_types, projection);
+    auto cursor = make_cursor(info, range, schema_types, projection);
     ASSERT_NE(cursor, nullptr);
     ASSERT_TRUE(cursor->valid());
 
@@ -304,7 +321,7 @@ TEST_F(ColumnSSTableBuilderTest, MultipleBlocksRoundtrip) {
     read::sstable::KeyRange range{std::nullopt, std::nullopt};
     std::vector<std::size_t> projection = {0, 1, 2};
 
-    auto cursor = read::sstable::make_sstable_cursor(info, range, schema_types, projection);
+    auto cursor = make_cursor(info, range, schema_types, projection);
     ASSERT_NE(cursor, nullptr);
 
     int count = 0;
@@ -314,4 +331,72 @@ TEST_F(ColumnSSTableBuilderTest, MultipleBlocksRoundtrip) {
         ++count;
     }
     EXPECT_EQ(count, N);
+}
+
+TEST_F(ColumnSSTableBuilderTest, WritesNumericStatsFileReadableBySSTableReader) {
+    auto schema = make_schema();
+    const int N = 300;
+
+    SSTableBuildResult build_result;
+    {
+        ColumnSSTableBuilder builder(schema, sst_dir_, /*sparse_index_step=*/1);
+        for (int i = 1; i <= N; ++i) {
+            builder.add(make_row(static_cast<Key>(i), i * 10, static_cast<double>(i) * 0.25));
+        }
+        build_result = builder.finish();
+    }
+
+    ASSERT_TRUE(fs::exists(sst_dir_ / "stats.bin"));
+    ASSERT_GT(build_result.num_blocks, 1u);
+
+    read::sstable::SSTableReader reader(sst_dir_);
+    const auto metadata = reader.read_column_metadata_range(
+        0,
+        build_result.num_blocks,
+        static_cast<std::uint32_t>(schema.size())
+    );
+
+    const auto all_stats = reader.read_numeric_stats_range(
+        0,
+        build_result.num_blocks,
+        {0, 1, 2}
+    );
+
+    EXPECT_FALSE(all_stats.by_column.contains(0));
+    ASSERT_TRUE(all_stats.by_column.contains(1));
+    ASSERT_TRUE(all_stats.by_column.contains(2));
+    ASSERT_EQ(all_stats.by_column.at(1).size(), build_result.num_blocks);
+    ASSERT_EQ(all_stats.by_column.at(2).size(), build_result.num_blocks);
+
+    for (std::uint32_t block_id = 0; block_id < build_result.num_blocks; ++block_id) {
+        const auto key_meta_it = std::find_if(
+            metadata.begin(),
+            metadata.end(),
+            [block_id](const auto& meta) {
+                return meta.block_id == block_id && meta.column_idx == KEY_COLUMN_INDEX;
+            }
+        );
+        ASSERT_NE(key_meta_it, metadata.end());
+
+        const auto& value_stats = all_stats.by_column.at(1)[block_id];
+        EXPECT_EQ(value_stats.column_idx, 1u);
+        EXPECT_EQ(value_stats.type, ValueType::INT64);
+        EXPECT_TRUE(value_stats.has_value);
+        EXPECT_EQ(std::get<std::int64_t>(value_stats.min_value), key_meta_it->min_key * 10);
+        EXPECT_EQ(std::get<std::int64_t>(value_stats.max_value), key_meta_it->max_key * 10);
+
+        const auto& score_stats = all_stats.by_column.at(2)[block_id];
+        EXPECT_EQ(score_stats.column_idx, 2u);
+        EXPECT_EQ(score_stats.type, ValueType::DOUBLE);
+        EXPECT_TRUE(score_stats.has_value);
+        EXPECT_DOUBLE_EQ(std::get<double>(score_stats.min_value), static_cast<double>(key_meta_it->min_key) * 0.25);
+        EXPECT_DOUBLE_EQ(std::get<double>(score_stats.max_value), static_cast<double>(key_meta_it->max_key) * 0.25);
+    }
+
+    const auto second_block_score = reader.read_numeric_stats_range(1, 1, {2});
+    ASSERT_TRUE(second_block_score.by_column.contains(2));
+    ASSERT_EQ(second_block_score.by_column.at(2).size(), 1u);
+
+    const auto missing_column = reader.read_numeric_stats_range(0, 1, {42});
+    EXPECT_TRUE(missing_column.by_column.empty());
 }

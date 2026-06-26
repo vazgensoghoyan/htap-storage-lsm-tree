@@ -8,12 +8,25 @@ project(htap_storage LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # -----------------------------
 # Options
 # -----------------------------
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(BUILD_TESTS "Build tests" ON)
+option(HTAP_ENABLE_LOGGING "Enable runtime logging" OFF)
+
+#   -DHTAP_BACKGROUND_COMPACTION=ON  (по умолчанию) — фоновый worker-поток
+#   -DHTAP_BACKGROUND_COMPACTION=OFF — синхронный flush/compaction в insert()
+# Значение можно переопределить в рантайме, выставив поле в StorageConfig
+option(HTAP_BACKGROUND_COMPACTION "Default mode for flush/compaction: ON=background thread, OFF=synchronous" ON)
+
+# -----------------------------
+# Threads (фоновый worker compaction/flush)
+# -----------------------------
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
 
 # -----------------------------
 # Collect sources automatically
@@ -29,6 +42,23 @@ target_include_directories(htap_storage
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+target_link_libraries(htap_storage
+    PUBLIC
+        Threads::Threads
+)
+
+if (HTAP_BACKGROUND_COMPACTION)
+    target_compile_definitions(htap_storage PUBLIC HTAP_BACKGROUND_COMPACTION_DEFAULT=true)
+else()
+    target_compile_definitions(htap_storage PUBLIC HTAP_BACKGROUND_COMPACTION_DEFAULT=false)
+endif()
+
+if (HTAP_ENABLE_LOGGING)
+    target_compile_definitions(htap_storage PUBLIC HTAP_ENABLE_LOGGING=1)
+else()
+    target_compile_definitions(htap_storage PUBLIC HTAP_ENABLE_LOGGING=0)
+endif()
 
 # -----------------------------
 # Compiler warnings

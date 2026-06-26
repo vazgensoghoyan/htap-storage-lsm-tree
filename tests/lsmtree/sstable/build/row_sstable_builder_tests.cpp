@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "lsmtree/sstable/build/row_sstable_builder.hpp"
+#include "lsmtree/sstable/build/sparse_index_options.hpp"
 #include "storage/model/schema_builder.hpp"
 
 #include "lsmtree/sstable/format/sparse_index_entry.hpp"
@@ -59,6 +60,32 @@ std::vector<SparseIndexEntry> read_index(const std::filesystem::path& path) {
 
 // 1. SST creation sanity
 
+TEST(SparseIndexOptionsTest, AdaptiveStepGrowsWithBlockCountAndBudget) {
+    const auto entry_size = static_cast<std::size_t>(SPARSE_INDEX_ENTRY_ON_DISK_SIZE);
+
+    SparseIndexOptions options{
+        .fixed_step = 0,
+        .target_index_bytes = entry_size * 10,
+        .min_step = 1,
+        .max_step = 4096
+    };
+
+    EXPECT_EQ(choose_sparse_index_step(10, options), 1u);
+    EXPECT_EQ(choose_sparse_index_step(100, options), 10u);
+    EXPECT_EQ(choose_sparse_index_step(1000, options), 100u);
+}
+
+TEST(SparseIndexOptionsTest, FixedStepOverridesAdaptiveBudget) {
+    SparseIndexOptions options{
+        .fixed_step = 7,
+        .target_index_bytes = SPARSE_INDEX_ENTRY_ON_DISK_SIZE,
+        .min_step = 1,
+        .max_step = 4096
+    };
+
+    EXPECT_EQ(choose_sparse_index_step(1000, options), 7u);
+}
+
 TEST(SSTableBuilderTest, CreatesAllFiles) {
     std::filesystem::path dir = "/tmp/sst_test_1";
     cleanup(dir);
@@ -76,6 +103,7 @@ TEST(SSTableBuilderTest, CreatesAllFiles) {
     ASSERT_TRUE(std::filesystem::exists(dir / "meta.bin"));
     ASSERT_TRUE(std::filesystem::exists(dir / "sparse.idx"));
     ASSERT_TRUE(std::filesystem::exists(dir / "info.bin"));
+    ASSERT_TRUE(std::filesystem::exists(dir / "stats.bin"));
 }
 
 // 2. Sorted order enforcement

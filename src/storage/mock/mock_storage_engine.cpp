@@ -44,10 +44,10 @@ void MockStorageEngine::insert(const std::string& table_name, const Row& values)
 
     Key key = std::get<int64_t>(*cell);
 
-    #ifdef LOGGING_ENABLED
+#if HTAP_ENABLE_LOGGING
     if (table.data.contains(key))
         LOG_WARN("insert overwrite: table='{}', key={}", table_name, key);
-    #endif
+#endif
 
     table.data[key] = values;
 
@@ -65,10 +65,12 @@ std::unique_ptr<ICursor> MockStorageEngine::scan(
     std::optional<Key> from,
     std::optional<Key> to,
     const std::vector<size_t>& projection,
-    ScanOrder order
+    ScanOrder order,
+    const read::DataSkippingFilter& data_skipping_filter
 ) const {
     (void)projection;
     (void)order;
+    (void)data_skipping_filter;
     const auto& table = get_table(table_name);
     LOG_DEBUG("scan: table='{}', from={}, to={}",
         table_name,

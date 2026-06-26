@@ -6,6 +6,7 @@
 
 #include "lsmtree/compaction/compaction_task.hpp"
 #include "lsmtree/sstable/metadata/sstable_info.hpp"
+#include "storage/api/config.hpp"
 #include "storage/model/schema.hpp"
 
 namespace htap::lsmtree {
@@ -23,7 +24,8 @@ class CompactionJob {
 public:
     CompactionJob(
         const storage::Schema& schema,
-        const std::string& table_path
+        const std::string& table_path,
+        const storage::StorageConfig& config
     );
 
     sstable::SSTableInfo run(
@@ -38,6 +40,7 @@ private:
 private:
     const storage::Schema& schema_;
     std::string table_path_;
+    storage::StorageConfig config_;
 };
 
 } // namespace htap::lsmtree

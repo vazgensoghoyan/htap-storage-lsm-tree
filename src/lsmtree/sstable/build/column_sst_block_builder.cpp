@@ -1,16 +1,26 @@
 #include "lsmtree/sstable/build/column_sst_block_builder.hpp"
 
 #include <cstring>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 
 using namespace htap::lsmtree::sstable;
 using namespace htap::storage;
 
-ColumnSSTBlockBuilder::ColumnSSTBlockBuilder(const Column& column, uint16_t column_id)
+ColumnSSTBlockBuilder::ColumnSSTBlockBuilder(
+    const Column& column,
+    uint16_t column_id,
+    std::size_t target_block_size_bytes
+)
     : column_(column)
     , column_id_(column_id)
+    , target_block_size_bytes_(target_block_size_bytes)
 {
+    if (target_block_size_bytes_ == 0) {
+        throw std::runtime_error("ColumnSSTBlockBuilder: target block size must be positive");
+    }
+
     reset();
 }
 
@@ -23,6 +33,7 @@ void ColumnSSTBlockBuilder::reset() {
 
     values_count_ = 0;
     full_ = false;
+    reset_numeric_stats();
 }
 
 bool ColumnSSTBlockBuilder::full() const {
@@ -61,9 +72,11 @@ void ColumnSSTBlockBuilder::add(const Row& row) {
         encode_value(val);
     }
 
+    update_numeric_stats(val);
+
     values_count_++;
 
-    if (size_bytes() >= TARGET_BLOCK_SIZE_BYTES)
+    if (size_bytes() >= target_block_size_bytes_)
         full_ = true;
 }
 
@@ -133,10 +146,72 @@ ColumnSSTBlockResult ColumnSSTBlockBuilder::finish() {
 
     ColumnSSTBlockResult result{
         .data = std::move(out),
-        .meta = meta
+        .meta = meta,
+        .numeric_stats = std::move(numeric_stats_)
     };
 
     reset();
 
     return result;
+}
+
+void ColumnSSTBlockBuilder::reset_numeric_stats() {
+    numeric_stats_.clear();
+
+    if (column_id_ == KEY_COLUMN_INDEX || !storage::read::sstable::is_numeric_type(column_.type)) {
+        return;
+    }
+
+    storage::read::sstable::NumericStatsValue zero = std::int64_t{0};
+    if (column_.type == ValueType::DOUBLE) {
+        zero = 0.0;
+    }
+
+    numeric_stats_.push_back(storage::read::sstable::NumericBlockStats{
+        .column_idx = column_id_,
+        .type = column_.type,
+        .has_value = false,
+        .min_value = zero,
+        .max_value = zero
+    });
+}
+
+void ColumnSSTBlockBuilder::update_numeric_stats(const NullableValue& value) {
+    if (numeric_stats_.empty() || !value.has_value()) {
+        return;
+    }
+
+    auto& stats = numeric_stats_.front();
+
+    if (stats.type == ValueType::INT64) {
+        const auto current = std::get<std::int64_t>(*value);
+
+        if (!stats.has_value) {
+            stats.min_value = current;
+            stats.max_value = current;
+            stats.has_value = true;
+            return;
+        }
+
+        stats.min_value = std::min(std::get<std::int64_t>(stats.min_value), current);
+        stats.max_value = std::max(std::get<std::int64_t>(stats.max_value), current);
+        return;
+    }
+
+    if (stats.type == ValueType::DOUBLE) {
+        const auto current = std::get<double>(*value);
+        if (std::isnan(current)) {
+            return;
+        }
+
+        if (!stats.has_value) {
+            stats.min_value = current;
+            stats.max_value = current;
+            stats.has_value = true;
+            return;
+        }
+
+        stats.min_value = std::min(std::get<double>(stats.min_value), current);
+        stats.max_value = std::max(std::get<double>(stats.max_value), current);
+    }
 }

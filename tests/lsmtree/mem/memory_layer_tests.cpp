@@ -48,7 +48,7 @@ TEST(MemoryLayerTest, ForceFreezeCreatesImmutable) {
     layer.insert({1, 100});
     layer.insert({2, 200});
 
-    layer.force_freeze();
+    layer.active_to_immutable();
 
     EXPECT_EQ(layer.immutable_count(), 1);
 }
@@ -56,7 +56,7 @@ TEST(MemoryLayerTest, ForceFreezeCreatesImmutable) {
 TEST(MemoryLayerTest, ForceFreezeOnEmpty) {
     MemoryLayer layer(100);
 
-    layer.force_freeze();
+    layer.active_to_immutable();
 
     EXPECT_EQ(layer.immutable_count(), 1);
 }

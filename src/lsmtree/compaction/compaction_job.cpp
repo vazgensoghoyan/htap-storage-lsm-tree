@@ -8,13 +8,16 @@
 
 #include "lsmtree/sstable/build/column_sstable_builder.hpp"
 #include "lsmtree/sstable/build/row_sstable_builder.hpp"
+#include "lsmtree/sstable/build/sparse_index_options.hpp"
 #include "lsmtree/sstable/format/sst_layout.hpp"
 
 #include "storage/api/cursor_interface.hpp"
 #include "storage/api/types.hpp"
 #include "storage/cursor/merge_cursor.hpp"
 #include "storage/read/sstable/key_range.hpp"
+#include "storage/read/sstable/sstable_block_cache.hpp"
 #include "storage/read/sstable/sstable_cursor_factory.hpp"
+#include "storage/read/sstable/sstable_metadata_cache.hpp"
 
 #include "utils/logger.hpp"
 
@@ -45,11 +48,25 @@ std::vector<ValueType> schema_types(const Schema& schema) {
     return types;
 }
 
+SparseIndexOptions sparse_index_options_from_config(const StorageConfig& config) {
+    return SparseIndexOptions{
+        .fixed_step = config.sparse_index_step,
+        .target_index_bytes = config.sparse_index_target_bytes,
+        .min_step = config.sparse_index_min_step,
+        .max_step = config.sparse_index_max_step
+    };
+}
+
 } // namespace
 
-CompactionJob::CompactionJob(const Schema& schema, const std::string& table_path)
+CompactionJob::CompactionJob(
+    const Schema& schema,
+    const std::string& table_path,
+    const StorageConfig& config
+)
     : schema_(schema)
     , table_path_(table_path)
+    , config_(config)
 {}
 
 std::string CompactionJob::build_sst_path(uint64_t sst_id) const {
@@ -85,9 +102,29 @@ SSTableInfo CompactionJob::run(
     std::vector<std::unique_ptr<ICursor>> cursors;
     cursors.reserve(candidates.size());
 
+    auto block_cache = std::make_shared<read::sstable::SSTableBlockCache>();
+    std::vector<std::unique_ptr<read::sstable::SSTableMetadataCache>> metadata_caches;
+    metadata_caches.reserve(candidates.size());
+
+    const auto columns_count = static_cast<std::uint32_t>(schema_.size());
+
     for (const auto& sst : candidates) {
-        auto cursor = read::sstable::make_sstable_cursor(sst, full_range, types, all_columns);
+        auto metadata_cache = std::make_unique<read::sstable::SSTableMetadataCache>(
+            sst,
+            columns_count
+        );
+
+        auto cursor = read::sstable::make_sstable_cursor(
+            sst,
+            *metadata_cache,
+            block_cache,
+            full_range,
+            types,
+            all_columns
+        );
+
         if (cursor && cursor->valid()) {
+            metadata_caches.push_back(std::move(metadata_cache));
             cursors.push_back(std::move(cursor));
         }
     }
@@ -99,11 +136,18 @@ SSTableInfo CompactionJob::run(
 
     // 2. Пишем новый SST с нужным layout
     const std::string new_path = build_sst_path(new_sst_id);
+    const auto sparse_index_options = sparse_index_options_from_config(config_);
 
     SSTableBuildResult build_result;
 
     if (task.output_layout == SSTLayout::COLUMN) {
-        ColumnSSTableBuilder builder(schema_, new_path);
+        ColumnSSTableBuilder builder(
+            schema_,
+            new_path,
+            sparse_index_options,
+            config_.column_block_target_rows,
+            config_.column_block_target_bytes
+        );
         while (merged->valid()) {
             Row row(schema_.size());
             row[KEY_COLUMN_INDEX] = merged->key();
@@ -115,7 +159,12 @@ SSTableInfo CompactionJob::run(
         }
         build_result = builder.finish();
     } else {
-        RowSSTableBuilder builder(schema_, new_path);
+        RowSSTableBuilder builder(
+            schema_,
+            new_path,
+            sparse_index_options,
+            config_.row_block_target_bytes
+        );
         while (merged->valid()) {
             Row row(schema_.size());
             row[KEY_COLUMN_INDEX] = merged->key();

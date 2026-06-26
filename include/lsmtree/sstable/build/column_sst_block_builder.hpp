@@ -1,10 +1,12 @@
 #pragma once // lsmtree/sstable/build/column_sst_block_builder.hpp
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
 #include "storage/api/types.hpp"
 #include "storage/model/schema.hpp"
+#include "storage/read/sstable/numeric_stats.hpp"
 
 namespace htap::lsmtree::sstable {
 
@@ -21,11 +23,16 @@ struct ColumnBlockMeta {
 struct ColumnSSTBlockResult {
     std::vector<uint8_t> data;
     ColumnBlockMeta meta;
+    std::vector<storage::read::sstable::NumericBlockStats> numeric_stats;
 };
 
 class ColumnSSTBlockBuilder {
 public:
-    ColumnSSTBlockBuilder(const storage::Column& column, uint16_t column_id);
+    ColumnSSTBlockBuilder(
+        const storage::Column& column,
+        uint16_t column_id,
+        std::size_t target_block_size_bytes = 4 * 1024
+    );
 
     void add(const storage::Row& row);
 
@@ -37,6 +44,8 @@ public:
 
 private:
     void encode_value(const storage::NullableValue& value);
+    void reset_numeric_stats();
+    void update_numeric_stats(const storage::NullableValue& value);
 
 private:
     const storage::Column& column_;
@@ -56,7 +65,8 @@ private:
 
     bool full_;
 
-    static constexpr size_t TARGET_BLOCK_SIZE_BYTES = 4 * 1024; // 4 KB
+    std::vector<storage::read::sstable::NumericBlockStats> numeric_stats_;
+    std::size_t target_block_size_bytes_;
 };
 
 } // namespace htap::lsmtree::sstable

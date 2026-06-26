@@ -23,7 +23,9 @@
 #include "storage/api/types.hpp"
 #include "storage/model/schema_builder.hpp"
 #include "storage/read/sstable/key_range.hpp"
+#include "storage/read/sstable/sstable_block_cache.hpp"
 #include "storage/read/sstable/sstable_cursor_factory.hpp"
+#include "storage/read/sstable/sstable_metadata_cache.hpp"
 #include "storage/read/sstable/sstable_reader.hpp"
 #include "storage/cursor/sstable_column_cursor.hpp"
 
@@ -99,6 +101,20 @@ read::sstable::KeyRange full_range() {
 
 read::sstable::KeyRange key_range(std::optional<Key> from, std::optional<Key> to) {
     return {from, to};
+}
+
+// Builds a cursor through the factory, creating per-call metadata/block caches.
+std::unique_ptr<ICursor> make_cursor(
+    const SSTableInfo& info,
+    const read::sstable::KeyRange& range,
+    const std::vector<ValueType>& types,
+    const std::vector<std::size_t>& projection
+) {
+    read::sstable::SSTableMetadataCache metadata_cache(
+        info, static_cast<std::uint32_t>(types.size()));
+    auto block_cache = std::make_shared<read::sstable::SSTableBlockCache>();
+    return read::sstable::make_sstable_cursor(
+        info, metadata_cache, block_cache, range, types, projection);
 }
 
 // Read sparse index entries from sparse.idx
@@ -201,7 +217,7 @@ TEST_F(ColumnSSTRoundtripTest, SingleRow_INT64Values_RoundtripCorrect) {
 
     auto info   = make_info(sst_dir_, result);
     auto types  = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, full_range(), types, {0, 1});
+    auto cursor = make_cursor(info, full_range(), types, {0, 1});
 
     ASSERT_NE(cursor, nullptr);
     ASSERT_TRUE(cursor->valid());
@@ -228,7 +244,7 @@ TEST_F(ColumnSSTRoundtripTest, AllValueTypes_INT64_DOUBLE_STRING_RoundtripCorrec
 
     auto info   = make_info(sst_dir_, result);
     auto types  = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, full_range(), types, {0, 1, 2, 3});
+    auto cursor = make_cursor(info, full_range(), types, {0, 1, 2, 3});
 
     ASSERT_NE(cursor, nullptr);
 
@@ -278,7 +294,7 @@ TEST_F(ColumnSSTRoundtripTest, NullValues_RoundtripCorrect) {
 
     auto info   = make_info(sst_dir_, result);
     auto types  = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, full_range(), types, {0, 1, 2, 3});
+    auto cursor = make_cursor(info, full_range(), types, {0, 1, 2, 3});
 
     ASSERT_NE(cursor, nullptr);
 
@@ -333,7 +349,7 @@ TEST_F(ColumnSSTRoundtripTest, KeyRange_FromOnly_ReturnsRowsFromBoundaryInclusiv
 
     auto info   = make_info(sst_dir_, result);
     auto types  = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, key_range(5, std::nullopt), types, {0, 1});
+    auto cursor = make_cursor(info, key_range(5, std::nullopt), types, {0, 1});
 
     ASSERT_NE(cursor, nullptr);
     ASSERT_TRUE(cursor->valid());
@@ -353,7 +369,7 @@ TEST_F(ColumnSSTRoundtripTest, KeyRange_ToOnly_ReturnsRowsBeforeBoundaryExclusiv
 
     auto info   = make_info(sst_dir_, result);
     auto types  = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, key_range(std::nullopt, 5), types, {0, 1});
+    auto cursor = make_cursor(info, key_range(std::nullopt, 5), types, {0, 1});
 
     ASSERT_NE(cursor, nullptr);
     ASSERT_TRUE(cursor->valid());
@@ -374,7 +390,7 @@ TEST_F(ColumnSSTRoundtripTest, KeyRange_BothBounds_ReturnsBoundedWindow) {
     auto info   = make_info(sst_dir_, result);
     auto types  = schema_types(schema);
     // from=5 (inclusive), to=11 (exclusive) → keys 5,6,7,8,9,10
-    auto cursor = read::sstable::make_sstable_cursor(info, key_range(5, 11), types, {0, 1});
+    auto cursor = make_cursor(info, key_range(5, 11), types, {0, 1});
 
     ASSERT_NE(cursor, nullptr);
     ASSERT_TRUE(cursor->valid());
@@ -400,7 +416,7 @@ TEST_F(ColumnSSTRoundtripTest, KeyRange_NoMatch_CursorEmptyOrInvalid) {
 
     auto info   = make_info(sst_dir_, result);
     auto types  = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, key_range(100, 200), types, {0, 1});
+    auto cursor = make_cursor(info, key_range(100, 200), types, {0, 1});
 
     bool empty = (cursor == nullptr) || !cursor->valid();
     EXPECT_TRUE(empty);
@@ -416,7 +432,7 @@ TEST_F(ColumnSSTRoundtripTest, KeyRange_UpperBoundExclusive_BoundaryRowNotReturn
     auto info   = make_info(sst_dir_, result);
     auto types  = schema_types(schema);
     // to=5 → keys 1,2,3,4 only
-    auto cursor = read::sstable::make_sstable_cursor(info, key_range(std::nullopt, 5), types, {0, 1});
+    auto cursor = make_cursor(info, key_range(std::nullopt, 5), types, {0, 1});
 
     ASSERT_NE(cursor, nullptr);
     std::vector<Key> keys_seen;
@@ -442,7 +458,7 @@ TEST_F(ColumnSSTRoundtripTest, Projection_SubsetOfColumns_OnlyRequestedColumnsRe
     auto info  = make_info(sst_dir_, result);
     auto types = schema_types(schema);
     // Project key(0) and age(1) only
-    auto cursor = read::sstable::make_sstable_cursor(info, full_range(), types, {0, 1});
+    auto cursor = make_cursor(info, full_range(), types, {0, 1});
 
     ASSERT_NE(cursor, nullptr);
     ASSERT_TRUE(cursor->valid());
@@ -470,7 +486,7 @@ TEST_F(ColumnSSTRoundtripTest, Projection_ScoreAndName_INT64Skipped) {
     auto info  = make_info(sst_dir_, result);
     auto types = schema_types(schema);
     // Project key(0), score(2), name(3) — skip age(1)
-    auto cursor = read::sstable::make_sstable_cursor(info, full_range(), types, {0, 2, 3});
+    auto cursor = make_cursor(info, full_range(), types, {0, 2, 3});
 
     ASSERT_NE(cursor, nullptr);
     ASSERT_TRUE(cursor->valid());
@@ -501,7 +517,7 @@ TEST_F(ColumnSSTRoundtripTest, Projection_KeyOnly_AllRowsKeyCorrect) {
 
     auto info  = make_info(sst_dir_, result);
     auto types = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, full_range(), types, {0});
+    auto cursor = make_cursor(info, full_range(), types, {0});
 
     ASSERT_NE(cursor, nullptr);
     int count = 0;
@@ -554,7 +570,7 @@ TEST_F(ColumnSSTRoundtripTest, MultipleBlocks_AllRowsPresent_InOrder) {
     };
 
     auto types  = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, full_range(), types, {0, 1, 2, 3});
+    auto cursor = make_cursor(info, full_range(), types, {0, 1, 2, 3});
 
     ASSERT_NE(cursor, nullptr);
     int count = 0;
@@ -600,7 +616,7 @@ TEST_F(ColumnSSTRoundtripTest, MultipleBlocks_KeyRangeFilter_OnlyMatchingBlocksR
 
     auto types  = schema_types(schema);
     // range [200, 251) → keys 200..250 = 51 rows
-    auto cursor = read::sstable::make_sstable_cursor(info, key_range(200, 251), types, {0, 1});
+    auto cursor = make_cursor(info, key_range(200, 251), types, {0, 1});
 
     ASSERT_NE(cursor, nullptr);
     int count = 0;
@@ -854,7 +870,7 @@ TEST_F(ColumnSSTRoundtripTest, LargeStringValues_DoNotCorruptAdjacentRows) {
 
     auto info   = make_info(sst_dir_, result);
     auto types  = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, full_range(), types, {0, 1, 2, 3});
+    auto cursor = make_cursor(info, full_range(), types, {0, 1, 2, 3});
 
     ASSERT_NE(cursor, nullptr);
 
@@ -891,7 +907,7 @@ TEST_F(ColumnSSTRoundtripTest, Factory_DispatchesByLayout_COLUMN) {
     ASSERT_EQ(info.layout, SSTLayout::COLUMN);
 
     auto types  = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, full_range(), types, {0, 1});
+    auto cursor = make_cursor(info, full_range(), types, {0, 1});
 
     ASSERT_NE(cursor, nullptr);
     ASSERT_TRUE(cursor->valid());
@@ -918,7 +934,7 @@ TEST_F(ColumnSSTRoundtripTest, ExtremeKeyValues_MinMaxINT64_RoundtripCorrect) {
 
     auto info   = make_info(sst_dir_, result);
     auto types  = schema_types(schema);
-    auto cursor = read::sstable::make_sstable_cursor(info, full_range(), types, {0, 1});
+    auto cursor = make_cursor(info, full_range(), types, {0, 1});
 
     ASSERT_NE(cursor, nullptr);
     ASSERT_TRUE(cursor->valid());

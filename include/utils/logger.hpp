@@ -1,25 +1,30 @@
 #pragma once // utils/logger.hpp
 
+#ifndef HTAP_ENABLE_LOGGING
+#define HTAP_ENABLE_LOGGING 0
+#endif
+
+#if HTAP_ENABLE_LOGGING
+
+#include <chrono>
+#include <format>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
-#include <chrono>
 #include <string>
-#include <format>
 
-#define LOGGING_ENABLED
-
-#ifdef LOGGING_ENABLED
-    #define LOG_INFO(fmt, ...)  htap::utils::Logger::info(fmt, ##__VA_ARGS__)
-    #define LOG_WARN(fmt, ...)  htap::utils::Logger::warn(fmt, ##__VA_ARGS__)
-    #define LOG_DEBUG(fmt, ...) htap::utils::Logger::debug(fmt, ##__VA_ARGS__)
-    #define LOG_ERROR(fmt, ...) htap::utils::Logger::error(fmt, ##__VA_ARGS__)
+#define LOG_INFO(...)  htap::utils::Logger::info(__VA_ARGS__)
+#define LOG_WARN(...)  htap::utils::Logger::warn(__VA_ARGS__)
+#define LOG_DEBUG(...) htap::utils::Logger::debug(__VA_ARGS__)
+#define LOG_ERROR(...) htap::utils::Logger::error(__VA_ARGS__)
 #else
-    #define LOG_INFO(fmt, ...)  ((void)0)
-    #define LOG_WARN(fmt, ...)  ((void)0)
-    #define LOG_DEBUG(fmt, ...) ((void)0)
-    #define LOG_ERROR(fmt, ...) ((void)0)
+#define LOG_INFO(...)  ((void)0)
+#define LOG_WARN(...)  ((void)0)
+#define LOG_DEBUG(...) ((void)0)
+#define LOG_ERROR(...) ((void)0)
 #endif
+
+#if HTAP_ENABLE_LOGGING
 
 namespace htap::utils {
 
@@ -83,3 +88,5 @@ private:
 };
 
 } // namespace htap::utils
+
+#endif

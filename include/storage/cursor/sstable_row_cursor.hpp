@@ -48,6 +48,7 @@ private:
     read::sstable::KeyRange range_;
     std::vector<ValueType> schema_;
     std::vector<std::size_t> projection_;
+    std::vector<bool> projected_columns_;
 
     std::size_t next_block_idx_ = 0;
     std::vector<Row> current_rows_;

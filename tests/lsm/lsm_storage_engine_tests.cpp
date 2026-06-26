@@ -3,10 +3,13 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
+
+#include "lsmtree/sstable/format/sst_layout.hpp"
 
 namespace htap::storage {
 namespace {
@@ -71,12 +74,34 @@ std::vector<Key> CollectKeys(ICursor& cursor) {
     return keys;
 }
 
+std::vector<std::filesystem::path> SstableDirs(const std::filesystem::path& table_dir) {
+    std::vector<std::filesystem::path> dirs;
+
+    for (const auto& entry : std::filesystem::directory_iterator(table_dir)) {
+        if (entry.is_directory() && entry.path().extension() == ".sst") {
+            dirs.push_back(entry.path());
+        }
+    }
+
+    return dirs;
+}
+
+std::uint32_t SparseIndexEntryCount(const std::filesystem::path& sst_dir) {
+    std::ifstream input(sst_dir / "sparse.idx", std::ios::binary | std::ios::ate);
+    if (!input.is_open()) {
+        return 0;
+    }
+
+    constexpr std::streamoff entry_size = sizeof(Key) + sizeof(std::uint32_t);
+    return static_cast<std::uint32_t>(input.tellg() / entry_size);
+}
+
 } 
 
 TEST(LSMStorageEngineTest, CreateTableStoresSchema) {
     const auto dir = MakeTempDir("create_table_stores_schema");
 
-    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
+    LSMStorageEngine storage(StorageConfig{.root_path = dir.string()});
 
     storage.create_table("users", MakeSchema());
 
@@ -96,7 +121,7 @@ TEST(LSMStorageEngineTest, CreateTableStoresSchema) {
 TEST(LSMStorageEngineTest, ScanReturnsInsertedRows) {
     const auto dir = MakeTempDir("scan_returns_inserted_rows");
 
-    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
+    LSMStorageEngine storage(StorageConfig{.root_path = dir.string()});
     storage.create_table("users", MakeSchema());
 
     storage.insert("users", MakeRow(3, 30, "c"));
@@ -119,7 +144,7 @@ TEST(LSMStorageEngineTest, ScanReturnsInsertedRows) {
 TEST(LSMStorageEngineTest, ScanRespectsRange) {
     const auto dir = MakeTempDir("scan_respects_range");
 
-    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
+    LSMStorageEngine storage(StorageConfig{.root_path = dir.string()});
     storage.create_table("users", MakeSchema());
 
     storage.insert("users", MakeRow(1, 10, "a"));
@@ -143,7 +168,7 @@ TEST(LSMStorageEngineTest, ScanRespectsRange) {
 TEST(LSMStorageEngineTest, GetReturnsSingleExistingRow) {
     const auto dir = MakeTempDir("get_returns_single_existing_row");
 
-    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
+    LSMStorageEngine storage(StorageConfig{.root_path = dir.string()});
     storage.create_table("users", MakeSchema());
 
     storage.insert("users", MakeRow(1, 10, "a"));
@@ -170,7 +195,7 @@ TEST(LSMStorageEngineTest, GetReturnsSingleExistingRow) {
 TEST(LSMStorageEngineTest, GetMissingKeyReturnsEmptyCursor) {
     const auto dir = MakeTempDir("get_missing_key_returns_empty_cursor");
 
-    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
+    LSMStorageEngine storage(StorageConfig{.root_path = dir.string()});
     storage.create_table("users", MakeSchema());
 
     storage.insert("users", MakeRow(1, 10, "a"));
@@ -186,7 +211,7 @@ TEST(LSMStorageEngineTest, GetMissingKeyReturnsEmptyCursor) {
 TEST(LSMStorageEngineTest, ProjectionAllowsReadingSelectedColumns) {
     const auto dir = MakeTempDir("projection_allows_reading_selected_columns");
 
-    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
+    LSMStorageEngine storage(StorageConfig{.root_path = dir.string()});
     storage.create_table("users", MakeSchema());
 
     storage.insert("users", MakeRow(1, 10, "a"));
@@ -215,10 +240,59 @@ TEST(LSMStorageEngineTest, ProjectionAllowsReadingSelectedColumns) {
     std::filesystem::remove_all(dir);
 }
 
+TEST(LSMStorageEngineTest, CompactionUsesConfiguredColumnBlocksAndSparseIndex) {
+    const auto dir = MakeTempDir("compaction_uses_configured_column_blocks");
+
+    StorageConfig config;
+    config.root_path = dir.string();
+    config.memtable_threshold = 2;
+    config.level0_compaction_trigger = 2;
+    config.row_to_column_level = 1;
+    config.sparse_index_step = 1;
+    config.row_block_target_bytes = 1024;
+    config.column_block_target_rows = 2;
+    config.column_block_target_bytes = 1024;
+    config.is_compaction_background = false;
+
+    LSMStorageEngine storage(config);
+    storage.create_table("users", MakeSchema());
+
+    storage.insert("users", MakeRow(1, 10, "a"));
+    storage.insert("users", MakeRow(2, 20, "b"));
+    storage.insert("users", MakeRow(3, 30, "c"));
+    storage.insert("users", MakeRow(4, 40, "d"));
+    storage.wait_for_compaction("users");
+
+    const auto sst_dirs = SstableDirs(dir / "users");
+    ASSERT_EQ(sst_dirs.size(), 1u);
+
+    std::ifstream info(sst_dirs.front() / "info.bin", std::ios::binary);
+    ASSERT_TRUE(info.is_open());
+
+    std::uint32_t num_blocks = 0;
+    Key min_key = 0;
+    Key max_key = 0;
+    std::uint8_t layout = 0;
+
+    info.read(reinterpret_cast<char*>(&num_blocks), sizeof(num_blocks));
+    info.read(reinterpret_cast<char*>(&min_key), sizeof(min_key));
+    info.read(reinterpret_cast<char*>(&max_key), sizeof(max_key));
+    info.read(reinterpret_cast<char*>(&layout), sizeof(layout));
+
+    EXPECT_EQ(num_blocks, 2u);
+    EXPECT_EQ(min_key, 1);
+    EXPECT_EQ(max_key, 4);
+    EXPECT_EQ(layout, static_cast<std::uint8_t>(htap::lsmtree::sstable::SSTLayout::COLUMN));
+    EXPECT_EQ(SparseIndexEntryCount(sst_dirs.front()), 2u);
+    EXPECT_TRUE(std::filesystem::exists(sst_dirs.front() / "stats.bin"));
+
+    std::filesystem::remove_all(dir);
+}
+
 TEST(LSMStorageEngineTest, ThrowsForMissingTable) {
     const auto dir = MakeTempDir("throws_for_missing_table");
 
-    LSMStorageEngine storage(lsmtree::StorageConfig{.root_path = dir.string()});
+    LSMStorageEngine storage(StorageConfig{.root_path = dir.string()});
 
     EXPECT_THROW(
         storage.scan("missing", std::nullopt, std::nullopt, {0}, ScanOrder::Unordered),
