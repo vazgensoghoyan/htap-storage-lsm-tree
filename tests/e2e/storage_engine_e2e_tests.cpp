@@ -177,6 +177,8 @@ TEST_F(StorageEngineE2ETest, CompactionToColumnSSTableRoundtripsProjectionAndPoi
 
     InsertRows(storage, 1, 65);
 
+    storage.wait_for_compaction(kTableName);
+
     ASSERT_TRUE(HasColumnSSTable(root / kTableName))
         << "Expected cascade compaction to create at least one COLUMN SSTable";
 

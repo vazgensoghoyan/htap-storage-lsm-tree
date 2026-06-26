@@ -129,6 +129,9 @@ LSMTree::LSMTree(const Schema& schema, const StorageConfig& config)
 }
 
 LSMTree::~LSMTree() {
+    if (config_.is_compaction_background) {
+        wait_for_compaction();
+    }
     {
         std::lock_guard<std::mutex> lock(mutex_);
         stop_ = true;
